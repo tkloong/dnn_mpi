@@ -9,19 +9,23 @@
 #define MAX_ITER 200
 #define MAX_LINE_LEN 1024
 
-typedef double FEAT;
+//typedef double FEAT;
+typedef int FEAT;
 typedef int IDX;
 typedef int LABEL;
 typedef int INST_SZ;
 typedef int FEAT_SZ;
 
 class LIBSVM {
+    public:
     FEAT *feat;
     IDX *idx;
     LABEL *label;
     INST_SZ numInst;
+    FEAT_SZ numFeat;
     int max_line_len;
 
+    private:
     char* readline(FILE *input)
     {
         int len; 
@@ -43,7 +47,7 @@ class LIBSVM {
 
     public:
     LIBSVM() : max_line_len(MAX_LINE_LEN) {}
-    LIBSVM(const char* datafile, INST_SZ numInst, INST_SZ numLabel, FEAT_SZ numFeat) : numInst(0), max_line_len(MAX_LINE_LEN)
+    LIBSVM(const char* datafile, INST_SZ numInst, INST_SZ numLabel, FEAT_SZ numFeat) : numInst(0), numFeat(numFeat), max_line_len(MAX_LINE_LEN)
     {
         libsvm_read_dense(datafile, numInst, numLabel, numFeat);
     }
@@ -103,10 +107,10 @@ int main(int argc, char** argv) {
     MPI_Get_processor_name(processor_name, &name_len);
 
     // Read Data
-    char datafile[20] = "testing";
-    INST_SZ numInst = 5000;
-    INST_SZ numLabel = 26;
-    FEAT_SZ numFeat = 16;
+    char datafile[50] = "/home/loong/data/poker";
+    INST_SZ numInst = 25010;
+    INST_SZ numLabel = 10;
+    FEAT_SZ numFeat = 10;
     LIBSVM data(datafile, numInst, numLabel, numFeat);
 
     //initial(weight, biases);

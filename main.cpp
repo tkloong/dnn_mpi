@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
+#include "dnn.h"
 
 #define ERR_READ -1
 #define ERR_NEW -2
@@ -65,6 +67,7 @@ class LIBSVM {
         assert(this->numInst == numInst);
 
         // Initialize
+        //this->label = safeMalloc(LABEL, this->numInst);
         this->label = new LABEL[this->numInst];
         if (this->label == NULL) return ERR_NEW;
         this->idx = new IDX[this->numInst * numFeat];
@@ -85,12 +88,15 @@ class LIBSVM {
 
                 *(this->idx + idx) = atoi(temp);
                 *(this->feat + idx) = strtod(strtok(NULL, " \t"), NULL);
-                //p = strtok(line, " \t");
-                
+
                 ++idx;
             } 
             ++instId;
         }
+    }
+
+    int libsvm_read_sparse(const char* datafile, INST_SZ numInst, INST_SZ numLabel, FEAT_SZ numFeat, INST_SZ start=0, INST_SZ stop=0)
+    {
     }
 };
 
@@ -101,10 +107,12 @@ int main(int argc, char** argv) {
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
 
     // Initialize the MPI environment
+    /*
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Get_processor_name(processor_name, &name_len);
+    */
 
     // Read Data
     char datafile[50] = "/home/loong/data/poker";
@@ -113,23 +121,61 @@ int main(int argc, char** argv) {
     FEAT_SZ numFeat = 10;
     LIBSVM data(datafile, numInst, numLabel, numFeat);
 
+    /*
+    printf("data.label: \n");
+    for (int i=0; i<data.numInst; ++i) {
+        printf("%d ", data.label[i]);
+        for (int j=0; j<data.numFeat; ++j) {
+            printf("%d:", data.idx[i*data.numFeat + j]);
+            printf("%d", data.feat[i*data.numFeat + j]);
+            if (j!=data.numFeat - 1) printf(" ");
+        }
+        printf("\n");
+    }
+    */
+
+    /*
+    int numNeuron[] = {13, 26, 26, 2};
+    int split[] = {2, 2, 2, 1};
+    int numLayer = 3;
+    */
+    int numNeuron[] = {13, 26, 2};
+    int split[] = {2, 4, 1};
+    int numLayer = 2;
+    DNN dnn;
+    dnn.initial(argc, argv, numLayer, numNeuron, split);
+    dnn.readWeight();
+    //dnn.DNN::*weightInit();
+    //dnn.activationFunc[2]();
+
     //initial(weight, biases);
 
+    //dnn.feedforward();
     for (int i=0; i<MAX_ITER; ++i) {
         /*
-        feedforward();
-        backforward();
-        calcJacobian();
-        calcJBJv();
-        CG();
-        update();
+           dnn.feedforward();
+        //dnn.calcGradient();
+        dnn.backforward();
+        dnn.calcJacobian();
+        dnn.calcJBJv();
+        dnn.CG();
+        dnn.update();
         */
     }
 
-    // Print a hello world message
-    printf("Hello world from processor %s, rank %d"
-           " out of %d processors\n", processor_name, rank, size);
+    //printf("Hello world from processor %s, rank %d"
+    //        " out of %d processors\n", processor_name, rank, size);
 
-    MPI_Finalize();
+    dnn.finalize();
+    printf("Hello world from processor");
+    {
+        int i = 0;
+        char hostname[256];
+        gethostname(hostname, sizeof(hostname));
+        printf("PID %d on %s ready for attach\n", getpid(), hostname);
+        fflush(stdout);
+        while (0 == i)
+            sleep(5);
+    }
 }
 

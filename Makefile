@@ -8,9 +8,9 @@ TARGET=./main
 
 .PHONY: clean all run
 
-all: $(SRC) dnn.cpp $(TARGET)
+all: $(SRC) dnn.cpp libsvm.h $(TARGET)
     
-$(TARGET): $(SRC) dnn.cpp
+$(TARGET): $(SRC) dnn.cpp libsvm.h
 	$(MPICC) $< dnn.cpp $(CFLAGS) $(LDFLAGS) -o $(TARGET)
 
 run:

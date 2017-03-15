@@ -86,7 +86,7 @@ class LIBSVM {
             temp = strtok(line, " \t");
             *(this->label + instId) = atoi(temp);
             while(true) {
-                temp = strtok(NULL, ":");
+                temp = strtok(NULL, ":\n");
                 if (temp == NULL) break;
 
                 *(this->idx + idx) = atoi(temp);

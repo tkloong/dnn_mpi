@@ -57,7 +57,7 @@ class DNN {
 
     public:
         virtual void initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split);
-        void readInput(LIBSVM data);
+        void readInput(int numNeuron, int split, char *prefixFilename, char *datafile=NULL, INST_SZ numInst=0, INST_SZ numLabel=0, FEAT_SZ numFeat=0, bool isFileExist=true);
         void readWeightFromFile(char *filename);
         void readBiasesFromFile();
         void readWeight();

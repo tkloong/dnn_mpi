@@ -7,6 +7,17 @@
 #include "dnn.h"
 
 #define MAX_ITER 200
+#define MAX_LEN_FILENAME 128
+
+#define IS_INPUT_SPLIT false
+#define DATA_PATH "/home/loong/data/heart_scale"
+#define DATA_NAME "heart_scale"
+#define NUM_INST 270
+#define NUM_LABEL 2
+#define NUM_FEAT 13
+#define NUM_NEURON_EACH {13, 26, 2}
+#define NUM_SPLIT_EACH {2, 4, 1}
+#define NUM_LAYER 2
 
 int main(int argc, char** argv) {
     int rank; // Get the rank of the process
@@ -14,20 +25,11 @@ int main(int argc, char** argv) {
     int name_len;
     char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
 
-    // Initialize the MPI environment
-    /*
-    MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Get_processor_name(processor_name, &name_len);
-    */
-
     // Read Data
-    char datafile[50] = "/home/loong/data/poker";
-    INST_SZ numInst = 25010;
-    INST_SZ numLabel = 10;
-    FEAT_SZ numFeat = 10;
-    LIBSVM data(datafile, numInst, numLabel, numFeat);
+    char datafile[MAX_LEN_FILENAME] = DATA_PATH;
+    INST_SZ numInst = NUM_INST;
+    INST_SZ numLabel = NUM_LABEL;
+    FEAT_SZ numFeat = NUM_FEAT;
 
     /*
     printf("data.label: \n");
@@ -47,12 +49,14 @@ int main(int argc, char** argv) {
     int split[] = {2, 2, 2, 1};
     int numLayer = 3;
     */
-    int numNeuron[] = {13, 26, 2};
-    int split[] = {2, 4, 1};
-    int numLayer = 2;
+    int numNeuron[] = NUM_NEURON_EACH;
+    int split[] = NUM_SPLIT_EACH;
+    int numLayer = NUM_LAYER;
+    char filename[MAX_LEN_FILENAME] = DATA_NAME;
+    
     DNN dnn;
     dnn.initial(argc, argv, numLayer, numNeuron, split);
-    dnn.readInput(data);
+    dnn.readInput(numNeuron[0], split[0], filename, datafile, numInst, numLabel, numFeat, IS_INPUT_SPLIT);
     dnn.readWeight();
     //dnn.DNN::*weightInit();
     //dnn.activationFunc[2]();
@@ -72,10 +76,8 @@ int main(int argc, char** argv) {
         */
     }
 
-    //printf("Hello world from processor %s, rank %d"
-    //        " out of %d processors\n", processor_name, rank, size);
-
     dnn.finalize();
+    /*
     printf("Hello world from processor");
     {
         int i = 0;
@@ -86,5 +88,6 @@ int main(int argc, char** argv) {
         while (0 == i)
             sleep(5);
     }
+    */
 }
 

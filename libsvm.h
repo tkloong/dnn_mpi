@@ -94,24 +94,89 @@ class LIBSVM {
 
                 ++idx;
             } 
-            *(this->ptrInst + instId) = idx;
             ++instId;
+            *(this->ptrInst + instId) = idx;
         }
+        printf("instId= %d\n", *(ptrInst+numInst));
     }
 
     int libsvm_read_sparse(const char* datafile, INST_SZ numInst, INST_SZ numLabel, FEAT_SZ numFeat, INST_SZ start=0, INST_SZ stop=0)
     {
     }
 
-    floatX* getFeatDenseMatrix()
+    void exportSplit(int numNeuron, int featSplit, char *prefix)
+    {
+        int numInst = this->numInst;
+        int numFeat = this->numFeat;
+        int *label = this->label;
+        int *ptrInst = this->ptrInst;
+        char filename[128] = {0};
+        floatX *feat = this->feat;
+        //floatX *data = new floatX[*(ptrInst+numInst) - 1];
+        int itr = 1;
+
+        int normSet = numNeuron / featSplit;
+        int lastSet = numNeuron - (numNeuron / featSplit) * (featSplit - 1);
+        int *featSet = new int[featSplit+1];
+        floatX *ptrFeat;
+        int *ptrIdx;
+        featSet[0] = 1;
+        for (int s=1; s<=featSplit; ++s) featSet[s] = featSet[s-1] + normSet;
+        featSet[featSplit] = featSet[featSplit-1] + lastSet;
+
+        for (int s=0; s<featSplit; ++s) {
+            ptrInst = this->ptrInst;
+            snprintf(filename, sizeof(filename), "%s%s%d", prefix, ".feat", s);
+            FILE *fp = fopen(filename, "w");
+
+            for (int i=0; i<numInst; ++i) {
+                itr = featSet[s]; // feature index start by 1
+                ptrFeat = feat + *ptrInst;
+                ptrIdx = idx + *ptrInst;
+                // Check the features between current instance index and next instance index
+                //for (ptrIdx=idx+*ptrInst; *ptrIdx<*(ptrInst+1); ++ptrIdx, ++ptrFeat) {
+                for (int j=*ptrInst; j<*(ptrInst+1); ++j) {
+                    if (itr >= featSet[s+1]) break;
+
+                    if (*ptrIdx == itr) {
+                        fprintf(fp, "%d:", itr);
+                        fprintf(fp, "%g ", *ptrFeat);
+                        ++ptrIdx;
+                        ++ptrFeat;
+                    }
+                    if (*ptrIdx < itr && *ptrIdx < featSet[s]) {
+                        ++ptrIdx;
+                        ++ptrFeat;
+                    }
+
+                    if (*ptrIdx > featSet[s]) {
+                        ++itr;
+                    }
+                }
+                fprintf(fp, "\n");
+                ++ptrInst;
+            }
+            fclose(fp);
+        }
+
+        LABEL *tmpLabel = label;
+        snprintf(filename, sizeof(filename), "%s%s", prefix, ".lbl");
+        FILE *fp = fopen(filename, "w");
+        for (int i=0; i<numInst; ++i) {
+            fprintf(fp, "%d\n", *(tmpLabel++));
+        }
+        fclose(fp);
+    }
+
+    floatX* getFeatDenseMatrix(int rank)
     {
         int numInst = this->numInst;
         int numFeat = this->numFeat;
         int *label = this->label;
         int *ptr = this->ptrInst;
         floatX *feat = this->feat;
-        //floatX *data = new floatX[*(ptrInst+numInst) - 1];
-        floatX *data;
+        floatX *data = new floatX[*(ptrInst+numInst) - 1];
+        //floatX *data;
         int itr = 0;
 
         /*

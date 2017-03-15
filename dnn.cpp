@@ -186,10 +186,19 @@ void DNN::allocBiases()
     }
 }
 
-void DNN::readInput(LIBSVM data)
+void DNN::readInput(int numNeuron, int split, char *prefixFilename, char *datafile, INST_SZ numInst, INST_SZ numLabel, FEAT_SZ numFeat, bool isFileExist)
 {
-    X = data.getFeatDenseMatrix();
-    Y = data.getLabel();
+    /* master write file */
+    if (world_rank == 0 && !isFileExist) {
+        LIBSVM data(datafile, numInst, numLabel, numFeat);
+        data.exportSplit(numNeuron, split, prefixFilename);
+    }
+
+    /* Wait for the master until the file is prepared */
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    //X = data.getFeatDenseMatrix();
+    //Y = data.getLabel();
 }
 
 void DNN::readWeightFromFile(/* file */ char *filename)

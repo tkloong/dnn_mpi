@@ -1,5 +1,6 @@
 MPICC=mpicc
-CFLAGS=-O2 -g #-c -Wall
+#CFLAGS=-O2 -g #-c -Wall
+CFLAGS=-g
 LDFLAGS=-lstdc++
 EXEC_FLAGS=-np 12
 SRC=main.cpp
@@ -15,6 +16,9 @@ $(TARGET): $(SRC) dnn.cpp libsvm.h
 
 run:
 	mpiexec $(EXEC_FLAGS) $(TARGET)
+
+gdb:
+	mpiexec -n 1 gdb ./main : -n 11 ./main
 
 clean:
 	rm -rf $(OBJ) $(TARGET)

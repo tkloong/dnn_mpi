@@ -191,14 +191,19 @@ void DNN::readInput(int numNeuron, int split, char *prefixFilename, char *datafi
     /* master write file */
     if (world_rank == 0 && !isFileExist) {
         LIBSVM data(datafile, numInst, numLabel, numFeat);
-        data.exportSplit(numNeuron, split, prefixFilename);
+        data.export_split(numNeuron, split, prefixFilename);
     }
 
     /* Wait for the master until the file is prepared */
     MPI_Barrier(MPI_COMM_WORLD);
 
-    //X = data.getFeatDenseMatrix();
-    //Y = data.getLabel();
+    // The partitions w.r.t. first layer have to read file
+    if (curLayer == 0) {
+        LIBSVM data;
+
+        data.read_split_feat(prevSplitId, prefixFilename, world_rank);
+        //Y = data.getLabel();
+    }   
 }
 
 void DNN::readWeightFromFile(/* file */ char *filename)

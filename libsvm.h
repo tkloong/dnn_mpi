@@ -4,11 +4,13 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <err.h>
 #include <assert.h>
 
 #define ERR_READ -1
 #define ERR_NEW -2
 #define MAX_LINE_LEN 1024
+#define MAX_LEN_FILENAME 128
 
 //typedef double FEAT;
 typedef int IDX;
@@ -100,17 +102,61 @@ class LIBSVM {
         printf("instId= %d\n", *(ptrInst+numInst));
     }
 
+    int read_split_feat(int featSet, char *prefixFilename, int rankfordebug)
+    {
+        this->numInst = 0;
+        char *line;
+        char filename[MAX_LEN_FILENAME];
+        snprintf(filename, sizeof(filename), "%s.feat%d", prefixFilename, featSet);
+        FILE *fp = fopen(filename, "r");
+        if (fp == NULL) err(1, "Can't open file");
+
+        while ((line = readline(fp))!=NULL) {
+            ++this->numInst;
+        }
+
+        // Initialize
+        this->idx = new IDX[this->numInst * numFeat];
+        if (this->idx == NULL) err(2, "Allocation error");
+        this->feat = new FEAT[this->numInst * numFeat];
+        if (this->feat == NULL) err(2, "Allocation error");
+        this->ptrInst = new int[this->numInst + 1];
+        if (this->ptrInst == NULL) err(2, "Allocation error");
+
+        char *temp;
+        int numInst = 0;
+        IDX idx = 0;
+        fseek(fp, 0, SEEK_SET);
+        while ((line = readline(fp))!=NULL) {
+            while(true) {
+                temp = strtok(NULL, ":\n");
+                if (temp == NULL) break;
+
+                *(this->idx + idx) = atoi(temp);
+                *(this->feat + idx) = strtod(strtok(NULL, " \t"), NULL);
+
+                ++idx;
+            } 
+            ++numInst;
+            *(this->ptrInst + numInst) = idx;
+        }
+        printf("rank %d: read_split_feat: this->numInst=%d, numInst=%d\n", rankfordebug, this->numInst, numInst);
+        printf("read_split_feat: instId= %d\n", *(ptrInst+numInst));
+        assert(this->numInst == numInst);
+    }
+
+
     int libsvm_read_sparse(const char* datafile, INST_SZ numInst, INST_SZ numLabel, FEAT_SZ numFeat, INST_SZ start=0, INST_SZ stop=0)
     {
     }
 
-    void exportSplit(int numNeuron, int featSplit, char *prefix)
+    void export_split(int numNeuron, int featSplit, char *prefix)
     {
         int numInst = this->numInst;
         int numFeat = this->numFeat;
         int *label = this->label;
         int *ptrInst = this->ptrInst;
-        char filename[128] = {0};
+        char filename[MAX_LEN_FILENAME] = {0};
         floatX *feat = this->feat;
         //floatX *data = new floatX[*(ptrInst+numInst) - 1];
         int itr = 1;

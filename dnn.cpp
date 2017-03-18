@@ -1,4 +1,5 @@
 #include <string.h>
+#include <time.h>
 #include "dnn.h"
 
 void DNN::initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split)
@@ -26,7 +27,10 @@ void DNN::initial(int argc, char **argv, const int numLayer, int *numNeuron, int
     initNeuronSet();  // Hmmm.. this one may not useful
     formMPIGroup();
 
+    srand(world_rank * time(NULL));
     // Allocate weight
+    prevEle = 0;
+    nextEle = 0;
     this->allocWeight();
     this->allocBiases();
 
@@ -145,8 +149,8 @@ void DNN::allocWeight()
     int nextNumNeurInSet = this->numNeurInSet[curLayer+1];
     int prevSplit = this->split[curLayer];
     int nextSplit = this->split[curLayer+1];
-    int prevEle = 0;
-    int nextEle = 0;
+    prevEle = 0;
+    nextEle = 0;
     
     if (prevSplitId == prevSplit-1 && nextSplitId == nextSplit-1) {
         prevEle = prevNumNeur - prevNumNeurInSet * (prevSplit-1);
@@ -172,7 +176,6 @@ void DNN::allocBiases()
     int nextNumNeur = this->numNeuron[curLayer+1];
     int nextNumNeurInSet = this->numNeurInSet[curLayer+1];
     int nextSplit = this->split[curLayer+1];
-    int nextEle = 0;
 
     /* Only master partitions need to allocate bias */
     if (prevSplitId == 0) {
@@ -266,7 +269,15 @@ void DNN::backforward()
 
 void DNN::randomInit()
 {
-    printf("randomInit\n");
+    double accum;
+    int total = prevEle * nextEle;
+    //printf("%d: %d x %d = %d\n", world_rank, prevEle, nextEle, total);
+    floatX *pWei = weight;
+    for (int i=0; i<total; ++i) {
+        accum = 0;
+        for (int c=0; c<12; ++c) accum += rand();
+        *(pWei++) = accum / RAND_MAX - 6;
+    }
 }
 
 void DNN::sparseInit()

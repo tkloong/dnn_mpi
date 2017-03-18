@@ -61,9 +61,10 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename, int rankfordebug)
     }
 
     // Initialize
-    this->idx = new IDX[this->numInst * numFeat];
+    int numFeatSplit = numFeat / featSplit + 1;
+    this->idx = new IDX[this->numInst * numFeatSplit];
     if (this->idx == NULL) err(2, "Allocation error");
-    this->feat = new FEAT[this->numInst * numFeat];
+    this->feat = new FEAT[this->numInst * numFeatSplit];
     if (this->feat == NULL) err(2, "Allocation error");
     this->ptrInst = new int[this->numInst + 1];
     if (this->ptrInst == NULL) err(2, "Allocation error");

@@ -3,6 +3,7 @@
 
 #include "libsvm.h"
 #include <mpi.h>
+#include <stdlib.h>
 
 class DNN;
 typedef void (DNN::*fpWeightInit)();
@@ -11,22 +12,33 @@ typedef double (DNN::*fpLoss)(double *);
 typedef double floatX;
 
 class DNN {
-    // Initialize the MPI environment
     private:
-        int numLayer;
-        int curLayer;
-        int *numNeuron; // 28-300-300-1
-        int *split; // 2-2-1-1
-        int *layerId;
-        int *masterId;
-        int prevSplitId;
-        int nextSplitId;
-        int *numPartition;
-        int *numNeurInSet;
-        floatX *weight; // 28*300, 300*300, 300*1
-        floatX *biases; // 300, 300, 1
-        floatX *X;
-        int *Y; // one-hot for multiclass
+        int numLayer;       // Total number of layer for this NN.
+        int curLayer;       // Layer Id in this partition.
+        int *numNeuron;     // Array of number of neuron for this NN structure. E.g. 28-300-300-1.
+        int *split;         // Split structure for this NN. E.g. 2-2-1-1.
+        int *layerId;       // Array of layer Id for each partition.
+        int *masterId;      // Array of master Id for each layer.
+        int prevSplitId;    // Previous split id in this partition.
+        int nextSplitId;    // Next split id in this partition.
+        int prevEle;        // First dimension of weight matrix.
+        int nextEle;        // Second dimension of weight matrix.
+        int *numPartition;  // Total number of partitions (Not used)
+        int *numNeurInSet;  // Array of floor(number of neurons in partitions for each layer).
+        floatX *weight;     // Weight matrix in this partition. E.g. 28*300, 300*300, 300*1.
+        floatX *biases;     // Biases in this partition. E.g. 300, 300, 1.
+        floatX *X;          // Array of input feature
+        int *Y;             // Array of one-hot label for multiclass
+        int world_rank;     // Rank of the process
+        int world_size;     // Number of the processes
+        MPI_Comm recvComm;  // recv from previous layer together with split[n] partitions
+        MPI_Comm bcastComm; // intercomm of recv broadcast from split[n-1] partitions
+        MPI_Comm prevBcastComm; // intercomm of recv broadcast from split[n-1] partitions
+        MPI_Comm nextBcastComm; // intercomm of send broadcast to split[n+1] partitions
+        MPI_Comm reduceComm;    // split[n-1] partitions do reduce
+        MPI_Group recvGrp;
+        MPI_Group bcastGrp;
+        MPI_Group reduceGrp;
         double linear(double *x);
         double sigmoid(double *x);
         double relu(double *x);
@@ -39,21 +51,11 @@ class DNN {
         void allocBiases();
         void randomInit();
         void sparseInit();
-        int world_rank; // Get the rank of the process
-        int world_size; // Get the number of processes
         void initMPI(int, char**);
         void initLayerId();
         void initSplitId();
         void initNeuronSet();
         void formMPIGroup();
-        MPI_Comm recvComm;  // recv from previous layer together with split[n] partitions
-        MPI_Comm bcastComm;  // intercomm of recv broadcast from split[n-1] partitions
-        MPI_Comm prevBcastComm;  // intercomm of recv broadcast from split[n-1] partitions
-        MPI_Comm nextBcastComm;  // intercomm of send broadcast to split[n+1] partitions
-        MPI_Comm reduceComm;  // split[n-1] partitions do reduce
-        MPI_Group recvGrp;
-        MPI_Group bcastGrp;
-        MPI_Group reduceGrp;
 
     public:
         virtual void initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split);

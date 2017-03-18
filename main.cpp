@@ -9,7 +9,7 @@
 #define MAX_ITER 200
 #define MAX_LEN_FILENAME 128
 
-#define HEART_SCALE
+#define POKER
 
 #ifdef HEART_SCALE
 #define IS_INPUT_SPLIT false
@@ -19,7 +19,7 @@
 #define NUM_LABEL 2
 #define NUM_FEAT 13
 #define NUM_NEURON_EACH {13, 26, 2}
-#define NUM_SPLIT_EACH {2, 4, 1}
+#define NUM_SPLIT_EACH {2, 2, 1}
 #define NUM_LAYER 2
 #endif
 
@@ -30,8 +30,8 @@
 #define NUM_INST 25010
 #define NUM_LABEL 10
 #define NUM_FEAT 10
-#define NUM_NEURON_EACH {10, 26, 2}
-#define NUM_SPLIT_EACH {2, 4, 1}
+#define NUM_NEURON_EACH {10, 26, 10}
+#define NUM_SPLIT_EACH {2, 2, 1}
 #define NUM_LAYER 2
 #endif
 
@@ -60,11 +60,6 @@ int main(int argc, char** argv) {
     }
     */
 
-    /*
-    int numNeuron[] = {13, 26, 26, 2};
-    int split[] = {2, 2, 2, 1};
-    int numLayer = 3;
-    */
     int numNeuron[] = NUM_NEURON_EACH;
     int split[] = NUM_SPLIT_EACH;
     int numLayer = NUM_LAYER;

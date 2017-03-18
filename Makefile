@@ -2,7 +2,7 @@ MPICC=mpicc
 #CFLAGS=-O2 -g #-c -Wall
 CFLAGS=-g
 LDFLAGS=-lstdc++
-EXEC_FLAGS=-np 12
+EXEC_FLAGS=-np 6
 SRC=main.cpp
 OBJ=$(SRC:.cpp=.o)
 TARGET=./main

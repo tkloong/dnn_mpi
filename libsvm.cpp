@@ -43,7 +43,6 @@ int LIBSVM::libsvm_read_dense(const char* datafile, INST_SZ numClass, FEAT_SZ nu
         ++instId;
         *(this->ptrInst + instId) = idx;
     }
-    printf("instId= %d\n", *(ptrInst+numInst));
     fclose(fp);
 }
 
@@ -87,8 +86,8 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename, int rankfordebug)
         ++numInst;
         *(this->ptrInst + numInst) = idx;
     }
-    printf("rank %d: read_split_feat: this->numInst=%d, numInst=%d\n", rankfordebug, this->numInst, numInst);
-    printf("read_split_feat: instId= %d\n", *(ptrInst+numInst));
+    //printf("rank %d: read_split_feat: this->numInst=%d, numInst=%d\n", rankfordebug, this->numInst, numInst);
+    //printf("read_split_feat: instId= %d\n", *(ptrInst+numInst));
     assert(this->numInst == numInst);
 
     fclose(fp);

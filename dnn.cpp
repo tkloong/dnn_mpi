@@ -186,12 +186,12 @@ void DNN::allocBiases()
     }
 }
 
-void DNN::readInput(int numNeuron, int split, char *prefixFilename, char *datafile, INST_SZ numInst, INST_SZ numLabel, FEAT_SZ numFeat, bool isFileExist)
+void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, bool isFileExist)
 {
     /* master write file */
     if (world_rank == 0 && !isFileExist) {
-        LIBSVM data(datafile, numInst, numLabel, numFeat);
-        data.export_split(numNeuron, split, prefixFilename);
+        LIBSVM data(datafile, numInst, numClass, numFeat);
+        data.export_split(numNeuron[0], split[0], prefixFilename);
     }
 
     /* Wait for the master until the file is prepared */
@@ -199,7 +199,7 @@ void DNN::readInput(int numNeuron, int split, char *prefixFilename, char *datafi
 
     // The partitions w.r.t. first layer have to read file
     if (curLayer == 0) {
-        LIBSVM data;
+        LIBSVM data(numInst, numClass, numFeat, split[0]);
 
         data.read_split_feat(prevSplitId, prefixFilename, world_rank);
         //Y = data.getLabel();

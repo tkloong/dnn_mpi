@@ -9,6 +9,9 @@
 #define MAX_ITER 200
 #define MAX_LEN_FILENAME 128
 
+#define HEART_SCALE
+
+#ifdef HEART_SCALE
 #define IS_INPUT_SPLIT false
 #define DATA_PATH "/home/loong/data/heart_scale"
 #define DATA_NAME "heart_scale"
@@ -18,6 +21,19 @@
 #define NUM_NEURON_EACH {13, 26, 2}
 #define NUM_SPLIT_EACH {2, 4, 1}
 #define NUM_LAYER 2
+#endif
+
+#ifdef POKER
+#define IS_INPUT_SPLIT false
+#define DATA_PATH "/home/loong/data/poker"
+#define DATA_NAME "poker"
+#define NUM_INST 25010
+#define NUM_LABEL 10
+#define NUM_FEAT 10
+#define NUM_NEURON_EACH {10, 26, 2}
+#define NUM_SPLIT_EACH {2, 4, 1}
+#define NUM_LAYER 2
+#endif
 
 int main(int argc, char** argv) {
     int rank; // Get the rank of the process
@@ -28,7 +44,7 @@ int main(int argc, char** argv) {
     // Read Data
     char datafile[MAX_LEN_FILENAME] = DATA_PATH;
     INST_SZ numInst = NUM_INST;
-    INST_SZ numLabel = NUM_LABEL;
+    INST_SZ numClass = NUM_LABEL;
     FEAT_SZ numFeat = NUM_FEAT;
 
     /*
@@ -56,7 +72,7 @@ int main(int argc, char** argv) {
     
     DNN dnn;
     dnn.initial(argc, argv, numLayer, numNeuron, split);
-    dnn.readInput(numNeuron[0], split[0], filename, datafile, numInst, numLabel, numFeat, IS_INPUT_SPLIT);
+    dnn.readInput(filename, datafile, numInst, numClass, numFeat, IS_INPUT_SPLIT);
     dnn.readWeight();
     //dnn.DNN::*weightInit();
     //dnn.activationFunc[2]();

@@ -9,10 +9,10 @@ TARGET=./main
 
 .PHONY: clean all run
 
-all: $(SRC) dnn.cpp libsvm.h $(TARGET)
+all: $(SRC) dnn.cpp libsvm.h libsvm.cpp $(TARGET)
     
-$(TARGET): $(SRC) dnn.cpp libsvm.h
-	$(MPICC) $< dnn.cpp $(CFLAGS) $(LDFLAGS) -o $(TARGET)
+$(TARGET): $(SRC) dnn.cpp libsvm.h libsvm.cpp
+	$(MPICC) $< dnn.cpp libsvm.cpp $(CFLAGS) $(LDFLAGS) -o $(TARGET)
 
 run:
 	mpiexec $(EXEC_FLAGS) $(TARGET)

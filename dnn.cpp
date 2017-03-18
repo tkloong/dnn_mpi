@@ -2,10 +2,19 @@
 #include <time.h>
 #include "dnn.h"
 
+DNN::DNN()
+{
+    weightInit = &DNN::NOT_DEF;
+}
+
+void DNN::NOT_DEF() {}
+
 void DNN::initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split)
 {
     // Initialize the MPI environment
     initMPI(argc, argv);
+
+    srand(world_rank * time(NULL));
 
     // Initial neural network implicit structure
     this->numLayer = numLayer;
@@ -13,13 +22,6 @@ void DNN::initial(int argc, char **argv, const int numLayer, int *numNeuron, int
     this->split = new int[numLayer+1];
     memcpy(this->numNeuron, numNeuron, (numLayer+1)*sizeof(int));
     memcpy(this->split, split, (numLayer+1)*sizeof(int));
-    weightInit = &DNN::randomInit;
-    //activationFunc = new fpActvFunc[numLayer] {&DNN::sigmoid, &DNN::sigmoid, &DNN::linear};
-    activationFunc = new fpActvFunc[numLayer];
-    activationFunc[0] = &DNN::sigmoid;
-    activationFunc[1] = &DNN::linear;
-    loss = &DNN::squareLoss;
-    //activationFunc[2] = &DNN::linear;
 
     // Assign worker to corresponding layer
     initLayerId();
@@ -27,12 +29,27 @@ void DNN::initial(int argc, char **argv, const int numLayer, int *numNeuron, int
     initNeuronSet();  // Hmmm.. this one may not useful
     formMPIGroup();
 
-    srand(world_rank * time(NULL));
     // Allocate weight
     prevEle = 0;
     nextEle = 0;
     this->allocWeight();
     this->allocBiases();
+
+    // Check configuration
+    if (weightInit == &DNN::NOT_DEF) {
+        fputs("Weight is not define\n", stderr);
+        exit(1);
+    }
+    /*
+    if (activationFunc == &DNN::NOT_DEF) {
+        fputs("Activation function is not define\n", stderr);
+        exit(1);
+    }
+    if (loss == &DNN::NOT_DEF) {
+        fputs("Loss is not define\n", stderr);
+        exit(1);
+    }
+    */
 
     // Initial weight
     (this ->* ((DNN*)this)->DNN::weightInit)();
@@ -271,7 +288,7 @@ void DNN::randomInit()
 {
     double accum;
     int total = prevEle * nextEle;
-    //printf("%d: %d x %d = %d\n", world_rank, prevEle, nextEle, total);
+    printf("%d: %d x %d = %d\n", world_rank, prevEle, nextEle, total);
     floatX *pWei = weight;
     for (int i=0; i<total; ++i) {
         accum = 0;
@@ -307,5 +324,6 @@ double DNN::tanh(double *x)
 
 double DNN::squareLoss(double *x)
 {
+    printf("squareLoss\n");
 }
 

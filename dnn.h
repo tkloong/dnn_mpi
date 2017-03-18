@@ -39,25 +39,18 @@ class DNN {
         MPI_Group recvGrp;
         MPI_Group bcastGrp;
         MPI_Group reduceGrp;
-        double linear(double *x);
-        double sigmoid(double *x);
-        double relu(double *x);
-        double tanh(double *x);
-        double softmax(double *x);
-        double logLoss(double *x);
-        double squareLoss(double *x);
-        double l1Loss(double *x);
         void allocWeight();
         void allocBiases();
-        void randomInit();
-        void sparseInit();
         void initMPI(int, char**);
         void initLayerId();
         void initSplitId();
         void initNeuronSet();
         void formMPIGroup();
+        void NOT_DEF();
+        //void NOT_DEF(double *);
 
     public:
+        DNN();
         virtual void initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split);
         void readInput(char *prefixFilename, char *datafile=NULL, INST_SZ numInst=0, INST_SZ numClass=0, FEAT_SZ numFeat=0, bool isFileExist=true);
         void readWeightFromFile(char *filename);
@@ -69,6 +62,16 @@ class DNN {
         fpWeightInit weightInit;
         fpActvFunc *activationFunc; // Function pointer array
         fpLoss loss;
+        void randomInit();
+        void sparseInit();
+        double linear(double *x);
+        double sigmoid(double *x);
+        double relu(double *x);
+        double tanh(double *x);
+        double softmax(double *x);
+        double logLoss(double *x);
+        double squareLoss(double *x);
+        double l1Loss(double *x);
         //double (*activationFunc[])(double *);
         void feedforward();
         //void calcGradient();

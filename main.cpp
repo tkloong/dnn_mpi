@@ -9,7 +9,7 @@
 #define MAX_ITER 200
 #define MAX_LEN_FILENAME 128
 
-#define POKER
+#define HEART_SCALE
 
 #ifdef HEART_SCALE
 #define IS_INPUT_SPLIT false
@@ -36,16 +36,15 @@
 #endif
 
 int main(int argc, char** argv) {
-    int rank; // Get the rank of the process
-    int size; // Get the number of processes
-    int name_len;
-    char processor_name[MPI_MAX_PROCESSOR_NAME]; // Get the name of the processor
-
-    // Read Data
+    // Configure data settings
     char datafile[MAX_LEN_FILENAME] = DATA_PATH;
     INST_SZ numInst = NUM_INST;
     INST_SZ numClass = NUM_LABEL;
     FEAT_SZ numFeat = NUM_FEAT;
+    int numNeuron[] = NUM_NEURON_EACH;
+    int split[] = NUM_SPLIT_EACH;
+    int numLayer = NUM_LAYER;
+    char filename[MAX_LEN_FILENAME] = DATA_NAME;
 
     /*
     printf("data.label: \n");
@@ -59,22 +58,23 @@ int main(int argc, char** argv) {
         printf("\n");
     }
     */
-
-    int numNeuron[] = NUM_NEURON_EACH;
-    int split[] = NUM_SPLIT_EACH;
-    int numLayer = NUM_LAYER;
-    char filename[MAX_LEN_FILENAME] = DATA_NAME;
     
+    // Configure NN settings
     DNN dnn;
+    dnn.weightInit = &DNN::randomInit;
+    //activationFunc = new fpActvFunc[numLayer] {&DNN::sigmoid, &DNN::sigmoid, &DNN::linear};
+    dnn.activationFunc = new fpActvFunc[numLayer];
+    dnn.activationFunc[0] = &DNN::sigmoid;
+    dnn.activationFunc[1] = &DNN::linear;
+    dnn.loss = &DNN::squareLoss;
+
+    // Initial NN
     dnn.initial(argc, argv, numLayer, numNeuron, split);
+
+    // Read data
     dnn.readInput(filename, datafile, numInst, numClass, numFeat, IS_INPUT_SPLIT);
-    dnn.readWeight();
-    //dnn.DNN::*weightInit();
-    //dnn.activationFunc[2]();
 
-    //initial(weight, biases);
-
-    //dnn.feedforward();
+    dnn.feedforward();
     for (int i=0; i<MAX_ITER; ++i) {
         /*
            dnn.feedforward();

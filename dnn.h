@@ -2,6 +2,7 @@
 #define _DNN_H_
 
 #include "libsvm.h"
+#include "libsvm.hpp"
 #include <mpi.h>
 #include <stdlib.h>
 
@@ -47,6 +48,7 @@ class DNN {
         void initNeuronSet();
         void formMPIGroup();
         void NOT_DEF();
+        LIBSVM *data;
         //void NOT_DEF(double *);
 
     public:

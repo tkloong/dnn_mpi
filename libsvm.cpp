@@ -1,6 +1,6 @@
 #include "libsvm.h"
 
-int LIBSVM::libsvm_read_dense(const char* datafile, INST_SZ numClass, FEAT_SZ numFeat, INST_SZ start, INST_SZ stop)
+int LIBSVM::libsvm_read_dense(const char* datafile, INST_SZ start, INST_SZ stop)
 {
     char *line;
     FILE *fp = fopen(datafile, "r");
@@ -46,7 +46,12 @@ int LIBSVM::libsvm_read_dense(const char* datafile, INST_SZ numClass, FEAT_SZ nu
     fclose(fp);
 }
 
-int LIBSVM::read_split_feat(int featSet, char *prefixFilename, int rankfordebug)
+void LIBSVM::set_featSplit(int split)
+{
+    this->featSplit = split;
+}
+
+int LIBSVM::read_split_feat(int featSet, char *prefixFilename)
 {
     char *line;
     char filename[MAX_LEN_FILENAME];
@@ -93,6 +98,29 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename, int rankfordebug)
     fclose(fp);
 }
 
+int LIBSVM::read_label(int prevSplitId, char *prefix, int rankfordebug)
+{
+    char filename[MAX_LEN_FILENAME] = {0};
+    snprintf(filename, sizeof(filename), "%s.lbl", prefix);
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) return ERR_READ;
+
+    this->label = new LABEL[this->numInst];
+    if (this->label == NULL) return ERR_NEW;
+
+    char *temp;
+    char *line;
+    LABEL instId = 0;
+    IDX idx = 0;
+    LABEL *ptrLbl = this->label;
+    while ((line = readline(fp))!=NULL) {
+        temp = strtok(line, " \t");
+        *ptrLbl = atoi(temp);
+        ++ptrLbl;
+    }
+    assert(this->numInst == (ptrLbl-this->label));
+}
+
 int LIBSVM::libsvm_read_sparse(const char* datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, INST_SZ start, INST_SZ stop)
 {
 }
@@ -119,7 +147,7 @@ void LIBSVM::export_split(int numNeuron, int featSplit, char *prefix)
 
     for (int s=0; s<featSplit; ++s) {
         ptrInst = this->ptrInst;
-        snprintf(filename, sizeof(filename), "%s%s%d", prefix, ".feat", s);
+        snprintf(filename, sizeof(filename), "%s.feat%d", prefix, s);
         FILE *fp = fopen(filename, "w");
 
         for (int i=0; i<numInst; ++i) {

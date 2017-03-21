@@ -54,19 +54,24 @@ class LIBSVM {
 
     public:
     LIBSVM() : max_line_len(MAX_LINE_LEN) {}
+
+    LIBSVM(INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat) : numInst(numInst), numFeat(numFeat), max_line_len(MAX_LINE_LEN) {}
+
     LIBSVM(int numInst, int numClass, int numFeat, int featSplit) : numInst(numInst), numClass(numClass), numFeat(numFeat), featSplit(featSplit), max_line_len(MAX_LINE_LEN) {}
-    LIBSVM(const char* datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat) : numInst(numInst), numFeat(numFeat), max_line_len(MAX_LINE_LEN)
-    {
-        libsvm_read_dense(datafile, numClass, numFeat);
-    }
 
-    int libsvm_read_dense(const char* datafile, INST_SZ numClass, FEAT_SZ numFeat, INST_SZ start=0, INST_SZ stop=0);
+    int libsvm_read_dense(const char* datafile, INST_SZ start=0, INST_SZ stop=0);
 
-    int read_split_feat(int featSet, char *prefixFilename, int rankfordebug);
+    void set_featSplit(int split);
+
+    int read_split_feat(int featSet, char *prefixFilename);
 
     int libsvm_read_sparse(const char* datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, INST_SZ start=0, INST_SZ stop=0);
 
     void export_split(int numNeuron, int featSplit, char *prefix);
+
+    int read_label(int prevSplitId, char *prefixFilename, int rankfordebug);
+
+    template <class T> void to_one_hot(T *mat, int dim);
 
     floatX* getFeatDenseMatrix(int rank);
 

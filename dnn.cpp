@@ -37,7 +37,7 @@ void DNN::initial(int argc, char **argv, const int numLayer, int *numNeuron, int
 
     // Check configuration
     if (weightInit == &DNN::NOT_DEF) {
-        fputs("Weight is not define\n", stderr);
+        fputs("Weight is not defined.\n", stderr);
         exit(1);
     }
     /*
@@ -208,10 +208,12 @@ void DNN::allocBiases()
 
 void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, bool isFileExist)
 {
+    data = new LIBSVM(numInst, numClass, numFeat);
+
     /* master write file */
     if (world_rank == 0 && !isFileExist) {
-        LIBSVM data(datafile, numInst, numClass, numFeat);
-        data.export_split(numNeuron[0], split[0], prefixFilename);
+        data->libsvm_read_dense(datafile);
+        data->export_split(numNeuron[0], split[0], prefixFilename);
     }
 
     /* Wait for the master until the file is prepared */
@@ -219,11 +221,12 @@ void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_
 
     // The partitions w.r.t. first layer have to read file
     if (curLayer == 0) {
-        LIBSVM data(numInst, numClass, numFeat, split[0]);
-
-        data.read_split_feat(prevSplitId, prefixFilename, world_rank);
-        //Y = data.getLabel();
+        data->set_featSplit(split[0]);
+        data->read_split_feat(prevSplitId, prefixFilename);
     }   
+    else if (curLayer == numLayer-1 && prevSplitId == 0) {
+        data->read_label(prevSplitId, prefixFilename, world_rank);
+    }
 }
 
 void DNN::readWeightFromFile(/* file */ char *filename)

@@ -4,6 +4,7 @@
 
 DNN::DNN()
 {
+    this->instBatch = 1;
     weightInit = &DNN::NOT_DEF;
 }
 
@@ -228,17 +229,6 @@ void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_
     if (curLayer == 0) {
         data->read_split_feat(prevSplitId, prefixFilename);
         data->to_dense(featSet[prevSplitId], featSet[prevSplitId+1]);
-        char filename[256];
-        snprintf(filename, sizeof(filename), "data.%d", world_rank);
-        FILE *fp = fopen(filename, "w");
-        FEAT *pdf = data->feat;
-        for (int i=0; i<data->getNumInst(); ++i) {
-            for (int j=featSet[prevSplitId]; j<featSet[prevSplitId+1]; ++j) {
-                fprintf(fp, "%d:%g ", j, *(pdf++));
-            }
-            fprintf(fp, "\n");
-        }
-        fclose(fp);
     }   
     else if (curLayer == numLayer-1 && prevSplitId == 0) {
         data->read_label(prevSplitId, prefixFilename, world_rank);
@@ -280,12 +270,51 @@ void DNN::finalize()
 
 void DNN::feedforward()
 {
+    X = data->getFeature();
+    int batchSize = this->instBatch;  // Function pipeline
+    double alpha = 1.0;
+    double beta = 0.0;
+    int m = data->getNumInst()/batchSize;  // Be attention on remainder
+    int n = nextEle;
+    int k = prevEle;
+    double *C = new double[m*n*sizeof(double)];
+
+    if (curLayer == 0) {
+        // Pipelined
+        for (int b=0; b<batchSize; ++b) {
+            //Calculate
+            cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, X, k, weight, n, beta, C, n);
+            // one row = one instance
+
+            //broadcast()
+        }
+    }
+    /*
+    else if (curLayer < numLayer - 1){
+        waitPrevLayer();
+
+        //Calculate
+        
+        broadcast()
+    }
+    else {
+        waitPrevLayer();
+        
+        //Calculate
+        
+        //Calculate function value
+    }
+    */
     //double xx = 8.;
     //(this->*((DNN*)this)->DNN::activationFunc[2])(&xx);
+    
+    /*
     int global = world_rank;
     MPI_Allreduce(&world_rank, &global, 1, MPI_INT, MPI_SUM, reduceComm);
     printf("[b4 bcast] rank %d: %d\n", world_rank, global);
     
+    // Broadcast from master to the next layer (Ensure at least one 
+    // partition's buffer is empty to avoid deadlock)
     if (curLayer < numLayer - 1 && prevSplitId == 0) {
         MPI_Bcast(&global, 1, MPI_INT, MPI_ROOT, nextBcastComm);
     }

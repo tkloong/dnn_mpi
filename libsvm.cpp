@@ -184,6 +184,7 @@ void LIBSVM::export_split(int numNeuron, int featSplit, char *prefix)
         fclose(fp);
     }
 
+    /* Export label */
     LABEL *tmpLabel = label;
     snprintf(filename, sizeof(filename), "%s%s", prefix, ".lbl");
     FILE *fp = fopen(filename, "w");

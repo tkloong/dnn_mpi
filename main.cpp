@@ -9,7 +9,7 @@
 #define MAX_ITER 200
 #define MAX_LEN_FILENAME 128
 
-#define HEART_SCALE
+#define HEART_SCALE // Have to change the core number
 
 #if defined(HEART_SCALE)
 #define IS_INPUT_SPLIT false

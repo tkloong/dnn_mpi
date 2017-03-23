@@ -3,6 +3,9 @@
 
 #include "libsvm.h"
 #include "libsvm.hpp"
+extern "C" {
+#include <cblas.h>
+}
 #include <mpi.h>
 #include <stdlib.h>
 
@@ -30,6 +33,7 @@ class DNN {
         floatX *biases;     // Biases in this partition. E.g. 300, 300, 1.
         floatX *X;          // Array of input feature
         int *Y;             // Array of one-hot label for multiclass
+        int instBatch;      // For pipeline in function value evaluation
         int world_rank;     // Rank of the process
         int world_size;     // Number of the processes
         MPI_Comm recvComm;  // recv from previous layer together with split[n] partitions
@@ -75,6 +79,7 @@ class DNN {
         double squareLoss(double *x);
         double l1Loss(double *x);
         //double (*activationFunc[])(double *);
+        void setInstBatch(int batchSize);
         void feedforward();
         //void calcGradient();
         void backforward();

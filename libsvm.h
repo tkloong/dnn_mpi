@@ -21,7 +21,8 @@ typedef double floatX;
 typedef floatX FEAT;
 
 class LIBSVM {
-    public:
+    //private:
+    public:  // For verify used.
     FEAT *feat;
     IDX *idx;
     int *ptrInst;
@@ -31,8 +32,8 @@ class LIBSVM {
     int numClass;
     int max_line_len;
     int featSplit;
+    int *featSet;
 
-    private:
     char* readline(FILE *input)
     {
         int len; 
@@ -59,23 +60,27 @@ class LIBSVM {
 
     LIBSVM(int numInst, int numClass, int numFeat, int featSplit) : numInst(numInst), numClass(numClass), numFeat(numFeat), featSplit(featSplit), max_line_len(MAX_LINE_LEN) {}
 
-    int libsvm_read_dense(const char* datafile, INST_SZ start=0, INST_SZ stop=0);
+    ~LIBSVM();
 
-    void set_featSplit(int split);
+    int libsvm_read(const char* datafile, INST_SZ start=0, INST_SZ stop=0);
 
     int read_split_feat(int featSet, char *prefixFilename);
 
-    int libsvm_read_sparse(const char* datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, INST_SZ start=0, INST_SZ stop=0);
+    int read_label(int prevSplitId, char *prefixFilename, int rankfordebug);
 
     void export_split(int numNeuron, int featSplit, char *prefix);
 
-    int read_label(int prevSplitId, char *prefixFilename, int rankfordebug);
+    int to_dense(int featStart, int featStop);
 
     template <class T> void to_one_hot(T *mat, int dim);
 
     floatX* getFeatDenseMatrix(int rank);
 
     int* getLabel();
+
+    FEAT* getFeature();
+    INST_SZ getNumInst();
+    int* initFeatSplit(int numNeuron, int split);
 };
 
 #endif

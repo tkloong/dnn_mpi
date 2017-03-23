@@ -190,11 +190,11 @@ void DNN::allocWeight()
 
 void DNN::allocBiases()
 {
+    /* Only master partitions need to allocate bias */
     int nextNumNeur = this->numNeuron[curLayer+1];
     int nextNumNeurInSet = this->numNeurInSet[curLayer+1];
     int nextSplit = this->split[curLayer+1];
 
-    /* Only master partitions need to allocate bias */
     if (prevSplitId == 0) {
         if (nextSplitId == nextSplit-1) {
             nextEle = nextNumNeur - nextNumNeurInSet * (nextSplit-1);
@@ -208,21 +208,37 @@ void DNN::allocBiases()
 
 void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, bool isFileExist)
 {
-    data = new LIBSVM(numInst, numClass, numFeat);
-
     /* master write file */
     if (world_rank == 0 && !isFileExist) {
-        data->libsvm_read_dense(datafile);
+        data = new LIBSVM(numInst, numClass, numFeat);
+        int *featSet = data->initFeatSplit(numNeuron[0], split[0]);
+
+        data->libsvm_read(datafile);
         data->export_split(numNeuron[0], split[0], prefixFilename);
+        delete data;
     }
 
     /* Wait for the master until the file is prepared */
     MPI_Barrier(MPI_COMM_WORLD);
 
+    data = new LIBSVM(numInst, numClass, numFeat);
+    int *featSet = data->initFeatSplit(numNeuron[0], split[0]);
+
     // The partitions w.r.t. first layer have to read file
     if (curLayer == 0) {
-        data->set_featSplit(split[0]);
         data->read_split_feat(prevSplitId, prefixFilename);
+        data->to_dense(featSet[prevSplitId], featSet[prevSplitId+1]);
+        char filename[256];
+        snprintf(filename, sizeof(filename), "data.%d", world_rank);
+        FILE *fp = fopen(filename, "w");
+        FEAT *pdf = data->feat;
+        for (int i=0; i<data->getNumInst(); ++i) {
+            for (int j=featSet[prevSplitId]; j<featSet[prevSplitId+1]; ++j) {
+                fprintf(fp, "%d:%g ", j, *(pdf++));
+            }
+            fprintf(fp, "\n");
+        }
+        fclose(fp);
     }   
     else if (curLayer == numLayer-1 && prevSplitId == 0) {
         data->read_label(prevSplitId, prefixFilename, world_rank);
@@ -256,7 +272,7 @@ void DNN::finalize()
 {
     delete[] this->numNeuron;
     delete[] this->split;
-    //MPI_Comm_free(&recvComm);
+    MPI_Comm_free(&recvComm);
     MPI_Comm_free(&reduceComm);
     //MPI_Comm_free(&bcastComm);
     MPI_Finalize();
@@ -281,6 +297,7 @@ void DNN::feedforward()
     }
 
     printf("[after bcast] rank %d: %d\n", world_rank, global);
+    */
 }
 
 void DNN::backforward()
@@ -328,5 +345,10 @@ double DNN::tanh(double *x)
 double DNN::squareLoss(double *x)
 {
     printf("squareLoss\n");
+}
+
+void DNN::setInstBatch(int batchSize)
+{
+    this->instBatch = batchSize;
 }
 

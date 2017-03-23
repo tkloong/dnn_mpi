@@ -11,19 +11,18 @@
 
 #define HEART_SCALE
 
-#ifdef HEART_SCALE
+#if defined(HEART_SCALE)
 #define IS_INPUT_SPLIT false
 #define DATA_PATH "/home/loong/data/heart_scale"
 #define DATA_NAME "heart_scale"
 #define NUM_INST 270
 #define NUM_LABEL 2
 #define NUM_FEAT 13
-#define NUM_NEURON_EACH {13, 26, 2}
-#define NUM_SPLIT_EACH {2, 2, 1}
-#define NUM_LAYER 2
-#endif
+#define NUM_NEURON_EACH {13, 26, 26, 26, 26, 2}
+#define NUM_SPLIT_EACH {2, 2, 2, 1, 1, 1}
+#define NUM_LAYER 5
 
-#ifdef POKER
+#elif defined(POKER)
 #define IS_INPUT_SPLIT false
 #define DATA_PATH "/home/loong/data/poker"
 #define DATA_NAME "poker"
@@ -74,10 +73,12 @@ int main(int argc, char** argv) {
     // Read data
     dnn.readInput(filename, datafile, numInst, numClass, numFeat, IS_INPUT_SPLIT);
 
+    dnn.setInstBatch(2);
+
     dnn.feedforward();
     for (int i=0; i<MAX_ITER; ++i) {
         /*
-           dnn.feedforward();
+        dnn.feedforward();
         //dnn.calcGradient();
         dnn.backforward();
         dnn.calcJacobian();

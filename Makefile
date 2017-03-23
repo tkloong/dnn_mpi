@@ -1,7 +1,7 @@
 MPICC=mpicc
 #CFLAGS=-O2 -g #-c -Wall
 CFLAGS=-g
-LDFLAGS=-lstdc++ -lopenblas -lpthread -lgfortran
+LDFLAGS=-lstdc++ -lm -lopenblas -lpthread -lgfortran
 EXEC_FLAGS=-np 12
 SRC=main.cpp
 OBJ=$(SRC:.cpp=.o)

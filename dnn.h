@@ -7,11 +7,12 @@ extern "C" {
 #include <cblas.h>
 }
 #include <mpi.h>
+#include <math.h>
 #include <stdlib.h>
 
 class DNN;
 typedef void (DNN::*fpWeightInit)();
-typedef double (DNN::*fpActvFunc)(double *);
+typedef double (DNN::*fpActvFunc)(double *, int);
 typedef double (DNN::*fpLoss)(double *);
 typedef double floatX;
 
@@ -70,10 +71,10 @@ class DNN {
         fpLoss loss;
         void randomInit();
         void sparseInit();
-        double linear(double *x);
-        double sigmoid(double *x);
-        double relu(double *x);
-        double tanh(double *x);
+        double linear(double *x, int len);
+        double sigmoid(double *x, int len);
+        double relu(double *x, int len);
+        double tanh(double *x, int len);
         double softmax(double *x);
         double logLoss(double *x);
         double squareLoss(double *x);

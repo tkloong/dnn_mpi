@@ -277,17 +277,19 @@ void DNN::feedforward()
     int m = data->getNumInst()/batchSize;  // Be attention on remainder
     int n = nextEle;
     int k = prevEle;
-    double *C = new double[m*n*sizeof(double)];
+    double *s = new double[m*n*sizeof(double)];  // linear mapping of X*W
 
     if (curLayer == 0) {
         // Pipelined
-        for (int b=0; b<batchSize; ++b) {
+        //for (int b=0; b<batchSize; ++b) {
             //Calculate
-            cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, X, k, weight, n, beta, C, n);
+            cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+                    m, n, k, alpha, X, k, weight, n, beta, s, n);
             // one row = one instance
+            (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, m*n);
 
             //broadcast()
-        }
+        //}
     }
     /*
     else if (curLayer < numLayer - 1){
@@ -351,22 +353,35 @@ void DNN::sparseInit()
     printf("sparseInit\n");
 }
 
-double DNN::linear(double *x)
+double DNN::linear(double *x, int len)
 {
     printf("linear\n");
 }
 
-double DNN::sigmoid(double *x)
+double DNN::sigmoid(double *ptr, int len)
 {
     printf("sigmoid\n");
+    for (int i=0; i<len; ++i, ++ptr) {
+        if (*ptr >= 0) {
+            *ptr = 1 / (1 + exp(*ptr));
+        }
+        else {
+            *ptr = exp(*ptr) / (exp(*ptr) + 1);
+        }
+    }
 }
 
-double DNN::relu(double *x)
+double DNN::relu(double *ptr, int len)
 {
     printf("relu\n");
+    for (int i=0; i<len; ++i, ++ptr) {
+        if (*ptr < 0) {
+            *ptr = 0;
+        }
+    }
 }
 
-double DNN::tanh(double *x)
+double DNN::tanh(double *x, int len)
 {
     printf("tanh\n");
 }

@@ -63,8 +63,9 @@ int main(int argc, char** argv) {
     dnn.weightInit = &DNN::randomInit;
     //activationFunc = new fpActvFunc[numLayer] {&DNN::sigmoid, &DNN::sigmoid, &DNN::linear};
     dnn.activationFunc = new fpActvFunc[numLayer];
-    dnn.activationFunc[0] = &DNN::sigmoid;
-    dnn.activationFunc[1] = &DNN::linear;
+    for (int i=0; i<numLayer-1; ++i)
+        dnn.activationFunc[i] = &DNN::sigmoid;
+    dnn.activationFunc[numLayer-1] = &DNN::linear;
     dnn.loss = &DNN::squareLoss;
 
     // Initial NN

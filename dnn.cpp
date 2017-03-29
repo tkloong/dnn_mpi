@@ -277,7 +277,9 @@ void DNN::feedforward()
     int m = data->getNumInst()/batchSize;  // Be attention on remainder
     int n = nextEle;
     int k = prevEle;
-    double *s = new double[m*n*sizeof(double)];  // linear mapping of X*W
+    int mn = m * n;
+    printf("mn = %d\n", mn);
+    double *s = new double[mn*sizeof(double)];  // linear mapping of X*W
 
     if (curLayer == 0) {
         // Pipelined
@@ -286,35 +288,68 @@ void DNN::feedforward()
             cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
                     m, n, k, alpha, X, k, weight, n, beta, s, n);
             // one row = one instance
-            (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, m*n);
+            (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
 
-            //broadcast()
-        //}
+            // Broadcast from master to the next layer (Ensure at least one 
+            // partition's buffer is empty to avoid deadlock)
+            // broadcast()
+            if (curLayer < numLayer - 1 && prevSplitId == 0) {
+                printf("checkpoint 1");
+                MPI_Bcast(s, mn, MPI_DOUBLE, MPI_ROOT, nextBcastComm);
+                printf("checkpoint 1'");
+            }
+            else if (curLayer < numLayer - 1 && prevSplitId != 0) {
+                printf("checkpoint 2");
+                MPI_Bcast(s, mn, MPI_DOUBLE, MPI_PROC_NULL, nextBcastComm);
+                printf("checkpoint 2'");
+            }
+            //}
+    }
+    else if (curLayer < numLayer - 1){
+        // Received from previous layer
+        // waitPrevLayer();
+        printf("checkpoint 3");
+        MPI_Bcast(s, mn, MPI_DOUBLE, 0, prevBcastComm);
+        printf("checkpoint 3'");
+
+        //Calculate
+        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+                m, n, k, alpha, s, k, weight, n, beta, s, n);
+        // one row = one instance
+        (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
+
+        // broadcast()
+        if (prevSplitId == 0) {
+            printf("checkpoint 1");
+            MPI_Bcast(s, mn, MPI_DOUBLE, MPI_ROOT, nextBcastComm);
+            printf("checkpoint 1'");
+        }
+        else if (prevSplitId != 0) {
+            printf("checkpoint 2");
+            MPI_Bcast(s, mn, MPI_DOUBLE, MPI_PROC_NULL, nextBcastComm);
+            printf("checkpoint 2'");
+        }
     }
     /*
-    else if (curLayer < numLayer - 1){
-        waitPrevLayer();
-
-        //Calculate
-        
-        broadcast()
-    }
     else {
         waitPrevLayer();
-        
+        printf("checkpoint 3");
+        MPI_Bcast(s, mn, MPI_DOUBLE, 0, prevBcastComm);
+        printf("checkpoint 3'");
+
         //Calculate
-        
+
         //Calculate function value
     }
     */
     //double xx = 8.;
     //(this->*((DNN*)this)->DNN::activationFunc[2])(&xx);
-    
+
     /*
-    int global = world_rank;
-    MPI_Allreduce(&world_rank, &global, 1, MPI_INT, MPI_SUM, reduceComm);
-    printf("[b4 bcast] rank %d: %d\n", world_rank, global);
-    
+       int global = world_rank;
+       MPI_Allreduce(&world_rank, &global, 1, MPI_INT, MPI_SUM, reduceComm);
+       printf("[b4 bcast] rank %d: %d\n", world_rank, global);
+
     // Broadcast from master to the next layer (Ensure at least one 
     // partition's buffer is empty to avoid deadlock)
     if (curLayer < numLayer - 1 && prevSplitId == 0) {
@@ -375,6 +410,7 @@ double DNN::relu(double *ptr, int len)
 {
     printf("relu\n");
     for (int i=0; i<len; ++i, ++ptr) {
+        //*ptr = *((int*)ptr) & 0x7fffffff;
         if (*ptr < 0) {
             *ptr = 0;
         }

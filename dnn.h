@@ -38,10 +38,11 @@ class DNN {
         int world_rank;     // Rank of the process
         int world_size;     // Number of the processes
         MPI_Comm recvComm;  // recv from previous layer together with split[n] partitions
-        MPI_Comm bcastComm; // intercomm of recv broadcast from split[n-1] partitions
+        //MPI_Comm bcastComm; // intercomm of recv broadcast from split[n-1] partitions
         MPI_Comm prevBcastComm; // intercomm of recv broadcast from split[n-1] partitions
         MPI_Comm nextBcastComm; // intercomm of send broadcast to split[n+1] partitions
         MPI_Comm reduceComm;    // split[n-1] partitions do reduce
+        MPI_Comm funcValComm; // intercomm to calculate the function value
         MPI_Group recvGrp;
         MPI_Group bcastGrp;
         MPI_Group reduceGrp;

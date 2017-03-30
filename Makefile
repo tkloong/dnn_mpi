@@ -2,7 +2,8 @@ MPICC=mpicc
 #CFLAGS=-O2 -g #-c -Wall
 CFLAGS=-g
 LDFLAGS=-lstdc++ -lm -lopenblas -lpthread -lgfortran
-EXEC_FLAGS=-np 12
+EXEC_FLAGS=-np 12  # HEART_SCALE
+#EXEC_FLAGS=-np 6  	# POKER
 SRC=main.cpp
 OBJ=$(SRC:.cpp=.o)
 TARGET=./main

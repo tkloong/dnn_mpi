@@ -110,7 +110,7 @@ void DNN::formMPIGroup()
                 masterId[curLayer+1] + (nextSplitId*split[curLayer+2]), bcastTag, &nextBcastComm);
         MPI_Comm_rank(nextBcastComm, &bcastRank);
         MPI_Comm_size(nextBcastComm, &bcastSize);
-        //printf ("[bcastComm %d] (rank %d/%d)worldRank %d -> %d\n", curLayer, bcastRank, bcastSize, world_rank, masterId[curLayer+1] + nextSplitId*split[curLayer+2]);
+        //printf ("[bcastComm] curLayer=%d (rank %d/%d) worldRank %d -> slaves:%d+%d*%d\n", curLayer, bcastRank, bcastSize, world_rank, masterId[curLayer+1], nextSplitId, split[curLayer+2]);
     }
 
     if (curLayer > 0) {
@@ -119,7 +119,7 @@ void DNN::formMPIGroup()
                 masterId[curLayer-1] + prevSplitId, bcastTag, &prevBcastComm);
         MPI_Comm_rank(prevBcastComm, &bcastRank);
         MPI_Comm_size(prevBcastComm, &bcastSize);
-        //printf ("[bcastComm %d] (rank %d/%d)worldRank %d -> %d\n", curLayer, bcastRank, bcastSize, world_rank, masterId[curLayer-1] + prevSplitId);
+        //printf ("[bcastComm] curLayer=%d (rank %d/%d) worldRank %d -> master:%d\n", curLayer, bcastRank, bcastSize, world_rank, masterId[curLayer-1] + prevSplitId);
     }
 }
 
@@ -264,13 +264,13 @@ void DNN::finalize()
     delete[] this->split;
     MPI_Comm_free(&recvComm);
     MPI_Comm_free(&reduceComm);
-    //MPI_Comm_free(&bcastComm);
+    //MPI_Comm_free(&prevBcastComm);
+    //MPI_Comm_free(&nextBcastComm);
     MPI_Finalize();
 }
 
 void DNN::feedforward()
 {
-    X = data->getFeature();
     int batchSize = this->instBatch;  // Function pipeline
     double alpha = 1.0;
     double beta = 0.0;
@@ -278,92 +278,111 @@ void DNN::feedforward()
     int n = nextEle;
     int k = prevEle;
     int mn = m * n;
-    printf("mn = %d\n", mn);
+    int msgLen = mn;
     double *s = new double[mn*sizeof(double)];  // linear mapping of X*W
+    double *global = new double[mn*sizeof(double)];  // linear mapping of X*W
+    printf("mn = %d\n", mn);
 
     if (curLayer == 0) {
         // Pipelined
         //for (int b=0; b<batchSize; ++b) {
-            //Calculate
+            X = data->getFeature();
+
+            // Calculate s = X*W locally, one row of X = one instance
             cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
                     m, n, k, alpha, X, k, weight, n, beta, s, n);
-            // one row = one instance
+            
+            // Sum up the s for each hidden unit
+            MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+
             (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
 
             // Broadcast from master to the next layer (Ensure at least one 
             // partition's buffer is empty to avoid deadlock)
-            // broadcast()
+            // broadcast(s, nextBcastComm, curLayer, prevSplitId);
+            msgLen = mn;
             if (curLayer < numLayer - 1 && prevSplitId == 0) {
-                printf("checkpoint 1");
-                MPI_Bcast(s, mn, MPI_DOUBLE, MPI_ROOT, nextBcastComm);
-                printf("checkpoint 1'");
+                MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, nextBcastComm);
+                MPI_Bcast(s, msgLen, MPI_DOUBLE, MPI_ROOT, nextBcastComm);
             }
             else if (curLayer < numLayer - 1 && prevSplitId != 0) {
-                printf("checkpoint 2");
-                MPI_Bcast(s, mn, MPI_DOUBLE, MPI_PROC_NULL, nextBcastComm);
-                printf("checkpoint 2'");
+                MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, nextBcastComm);
+                MPI_Bcast(s, msgLen, MPI_DOUBLE, MPI_PROC_NULL, nextBcastComm);
             }
             //}
     }
     else if (curLayer < numLayer - 1){
         // Received from previous layer
-        // waitPrevLayer();
-        printf("checkpoint 3");
-        MPI_Bcast(s, mn, MPI_DOUBLE, 0, prevBcastComm);
-        printf("checkpoint 3'");
+        // waitPrevLayer(s, prevBcastComm);
+        MPI_Bcast(&msgLen, 1, MPI_INT, 0, prevBcastComm);
+        MPI_Bcast(s, msgLen, MPI_DOUBLE, 0, prevBcastComm);
 
-        //Calculate
+        // Calculate s = X*W locally, one row of X = one instance
         cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
                 m, n, k, alpha, s, k, weight, n, beta, s, n);
-        // one row = one instance
+        
+        // Sum up the s for each hidden unit
+        MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+
         (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
 
-        // broadcast()
+        // broadcast(s, nextBcastComm, curLayer, prevSplitId);
+        msgLen = mn;
         if (prevSplitId == 0) {
-            printf("checkpoint 1");
-            MPI_Bcast(s, mn, MPI_DOUBLE, MPI_ROOT, nextBcastComm);
-            printf("checkpoint 1'");
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, nextBcastComm);
+            MPI_Bcast(s, msgLen, MPI_DOUBLE, MPI_ROOT, nextBcastComm);
         }
         else if (prevSplitId != 0) {
-            printf("checkpoint 2");
-            MPI_Bcast(s, mn, MPI_DOUBLE, MPI_PROC_NULL, nextBcastComm);
-            printf("checkpoint 2'");
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, nextBcastComm);
+            MPI_Bcast(s, msgLen, MPI_DOUBLE, MPI_PROC_NULL, nextBcastComm);
         }
     }
-    /*
     else {
-        waitPrevLayer();
-        printf("checkpoint 3");
-        MPI_Bcast(s, mn, MPI_DOUBLE, 0, prevBcastComm);
-        printf("checkpoint 3'");
+        //waitPrevLayer(s, prevBcastComm);
+        MPI_Bcast(&msgLen, 1, MPI_INT, 0, prevBcastComm);
+        MPI_Bcast(s, msgLen, MPI_DOUBLE, 0, prevBcastComm);
 
-        //Calculate
+        //Calculate s = X*W locally, one row of X = one instance
+        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 
+                m, n, k, alpha, s, k, weight, n, beta, s, n);
+
+        // Sum up the s for each hidden unit
+        MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+
+        (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
 
         //Calculate function value
+        // MPI_Reduce(s, global, mn, MPI_DOUBLE, MPI_SUM, , funcValComm);
     }
-    */
-    //double xx = 8.;
-    //(this->*((DNN*)this)->DNN::activationFunc[2])(&xx);
 
     /*
-       int global = world_rank;
-       MPI_Allreduce(&world_rank, &global, 1, MPI_INT, MPI_SUM, reduceComm);
-       printf("[b4 bcast] rank %d: %d\n", world_rank, global);
+    int global = world_rank;
+    //MPI_Allreduce(&world_rank, &global, 1, MPI_INT, MPI_SUM, reduceComm);
+    printf("[b4 bcast] rank %d: %d\n", world_rank, global);
 
+    msgLen = mn;
     // Broadcast from master to the next layer (Ensure at least one 
     // partition's buffer is empty to avoid deadlock)
     if (curLayer < numLayer - 1 && prevSplitId == 0) {
-        MPI_Bcast(&global, 1, MPI_INT, MPI_ROOT, nextBcastComm);
+        printf("Rank %d send %d to ..\n", world_rank, global);
+        //MPI_Bcast(&global, 1, MPI_INT, MPI_ROOT, nextBcastComm);
+        MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, nextBcastComm);
+        MPI_Bcast(s, msgLen, MPI_DOUBLE, MPI_ROOT, nextBcastComm);
     }
     else if (curLayer < numLayer - 1 && prevSplitId != 0) {
-        MPI_Bcast(&global, 1, MPI_INT, MPI_PROC_NULL, nextBcastComm);
+        //MPI_Bcast(&global, 1, MPI_INT, MPI_PROC_NULL, nextBcastComm);
+        MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, nextBcastComm);
+        MPI_Bcast(s, msgLen, MPI_DOUBLE, MPI_PROC_NULL, nextBcastComm);
     }
     else {
-        MPI_Bcast(&global, 1, MPI_INT, 0, prevBcastComm);
+        //MPI_Bcast(&global, 1, MPI_INT, 0, prevBcastComm);
+        MPI_Bcast(&msgLen, 1, MPI_INT, 0, prevBcastComm);
+        MPI_Bcast(s, msgLen, MPI_DOUBLE, 0, prevBcastComm);
+        printf("Rank %d recv %d from ..\n", world_rank, global);
     }
-
-    printf("[after bcast] rank %d: %d\n", world_rank, global);
     */
+
+    //printf("[after bcast] rank %d: %d\n", world_rank, global);
 }
 
 void DNN::backforward()

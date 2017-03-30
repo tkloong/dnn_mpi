@@ -10,6 +10,7 @@
 #define MAX_LEN_FILENAME 128
 
 #define HEART_SCALE // Have to change the core number
+//#define POKER // Have to change the core number
 
 #if defined(HEART_SCALE)
 #define IS_INPUT_SPLIT false

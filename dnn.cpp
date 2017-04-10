@@ -207,8 +207,10 @@ void DNN::allocBiases()
     }
 }
 
-void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, bool isFileExist)
+void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat, int labelInit,  bool isFileExist)
 {
+    if (labelInit == -1) err(1, "Please set labelInit");
+
     /* master write file */
     if (world_rank == 0 && !isFileExist) {
         data = new LIBSVM(numInst, numClass, numFeat);
@@ -231,7 +233,7 @@ void DNN::readInput(char *prefixFilename, char *datafile, INST_SZ numInst, INST_
         data->to_dense(featSet[prevSplitId], featSet[prevSplitId+1]);
     }   
     else if (curLayer == numLayer-1 && prevSplitId == 0) {
-        data->read_label(prevSplitId, prefixFilename, world_rank);
+        data->read_label(prevSplitId, prefixFilename, labelInit, world_rank);
     }
 }
 
@@ -269,7 +271,7 @@ void DNN::finalize()
     MPI_Finalize();
 }
 
-void DNN::feedforward()
+void DNN::feedforward(bool isTrain)
 {
     int batchSize = this->instBatch;  // Function pipeline
     double alpha = 1.0;
@@ -351,11 +353,29 @@ void DNN::feedforward()
 
         (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
 
+        int nextSplitLastId = this->split[curLayer+1] - 1;
         //Calculate function value
+        if (isTrain) {
+            if (prevSplitId == 0) {
+                int nextNumNeurInSet = this->numNeurInSet[curLayer+1];
+                int startLbl = nextSplitId * nextNumNeurInSet;
+                int stopLbl = (nextSplitId == nextSplitLastId) ? this->data->numClass : (nextSplitId+1) * nextNumNeurInSet;
+
+                printf("LAST LAYER: %d (from rank %d)\n", startLbl, world_rank);
+
+                (this->*((DNN*)this)->DNN::loss)(this->data->label, s, &m, &n, &startLbl, &stopLbl);
+            }
+
+        }
+        else {
+            //predict
+        }
+
         // MPI_Reduce(s, global, mn, MPI_DOUBLE, MPI_SUM, , funcValComm);
     }
 
     /*
+     * dnn.loss();
     int global = world_rank;
     //MPI_Allreduce(&world_rank, &global, 1, MPI_INT, MPI_SUM, reduceComm);
     printf("[b4 bcast] rank %d: %d\n", world_rank, global);
@@ -441,9 +461,43 @@ double DNN::tanh(double *x, int len)
     printf("tanh\n");
 }
 
-double DNN::squareLoss(double *x)
+double DNN::squareLoss(LABEL *label, double *x, int *inst, int *unit, int *startLbl, int *stopLbl)
 {
+    double loss = 0.0;
+    double y = 0;
     printf("squareLoss\n");
+    LABEL *ptrLbl = label;
+    this->numNeuron[this->numLayer];
+    int convertedLbl = 0;
+    for (int i=0; i<*inst; ++i) {
+        convertedLbl = *(label++) - *startLbl;
+        for (int u=0; u<*unit; ++u) {
+            y = *x;
+            if (u == convertedLbl) {
+                y = 1.0 - y;
+            }
+            loss += y*y;
+            x++;
+        }
+        /*
+           if (convertedLbl >= 0 && convertedLbl < *stopLbl) {
+           double y = 1.0 - *(x + convertedLbl);
+           loss += y * y;
+           for (int u=0; u<*unit; ++u) {
+           if (u == convertedLbl) continue;
+           loss += (*x)*(*x);
+           x++;
+           }
+           }
+           else {
+           for (int u=0; u<*unit; ++u) {
+           loss += (*x)*(*x);
+           x++;
+           }
+           }
+           */
+    }
+    printf("loss = %lf\n", loss);
 }
 
 void DNN::setInstBatch(int batchSize)

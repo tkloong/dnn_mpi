@@ -13,7 +13,7 @@ extern "C" {
 class DNN;
 typedef void (DNN::*fpWeightInit)();
 typedef double (DNN::*fpActvFunc)(double *, int);
-typedef double (DNN::*fpLoss)(double *);
+typedef double (DNN::*fpLoss)(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
 typedef double floatX;
 
 class DNN {
@@ -60,7 +60,7 @@ class DNN {
     public:
         DNN();
         virtual void initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split);
-        void readInput(char *prefixFilename, char *datafile=NULL, INST_SZ numInst=0, INST_SZ numClass=0, FEAT_SZ numFeat=0, bool isFileExist=true);
+        void readInput(char *prefixFilename, char *datafile=NULL, INST_SZ numInst=0, INST_SZ numClass=0, FEAT_SZ numFeat=0, int labelInit=-1, bool isFileExist=true);
         void readWeightFromFile(char *filename);
         void readBiasesFromFile();
         void readWeight();
@@ -76,13 +76,13 @@ class DNN {
         double sigmoid(double *x, int len);
         double relu(double *x, int len);
         double tanh(double *x, int len);
-        double softmax(double *x);
-        double logLoss(double *x);
-        double squareLoss(double *x);
-        double l1Loss(double *x);
+        double softmax(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
+        double logLoss(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
+        double squareLoss(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
+        double l1Loss(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
         //double (*activationFunc[])(double *);
         void setInstBatch(int batchSize);
-        void feedforward();
+        void feedforward(bool isTrain);
         //void calcGradient();
         void backforward();
         void calcJacobian();

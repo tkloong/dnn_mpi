@@ -66,7 +66,7 @@ class LIBSVM {
 
     int read_split_feat(int featSet, char *prefixFilename);
 
-    int read_label(int prevSplitId, char *prefixFilename, int rankfordebug);
+    int read_label(int prevSplitId, char *prefixFilename, int labelInit, int rankfordebug);
 
     void export_split(int numNeuron, int featSplit, char *prefix);
 

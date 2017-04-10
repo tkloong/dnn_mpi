@@ -22,6 +22,7 @@
 #define NUM_NEURON_EACH {13, 26, 26, 26, 26, 2}
 #define NUM_SPLIT_EACH {2, 2, 2, 1, 1, 1}
 #define NUM_LAYER 5
+#define LABEL_INIT 1
 
 #elif defined(POKER)
 #define IS_INPUT_SPLIT false
@@ -33,6 +34,7 @@
 #define NUM_NEURON_EACH {10, 26, 10}
 #define NUM_SPLIT_EACH {2, 2, 1}
 #define NUM_LAYER 2
+#define LABEL_INIT 0
 #endif
 
 int main(int argc, char** argv) {
@@ -45,6 +47,7 @@ int main(int argc, char** argv) {
     int split[] = NUM_SPLIT_EACH;
     int numLayer = NUM_LAYER;
     char filename[MAX_LEN_FILENAME] = DATA_NAME;
+    int labelInit = LABEL_INIT;
 
     /*
     printf("data.label: \n");
@@ -73,21 +76,27 @@ int main(int argc, char** argv) {
     dnn.initial(argc, argv, numLayer, numNeuron, split);
 
     // Read data
-    dnn.readInput(filename, datafile, numInst, numClass, numFeat, IS_INPUT_SPLIT);
+    dnn.readInput(filename, datafile, numInst, numClass, numFeat, labelInit, IS_INPUT_SPLIT);
 
     dnn.setInstBatch(2);
 
-    dnn.feedforward();
-    for (int i=0; i<MAX_ITER; ++i) {
-        /*
-        dnn.feedforward();
-        //dnn.calcGradient();
-        dnn.backforward();
-        dnn.calcJacobian();
-        dnn.calcJBJv();
-        dnn.CG();
-        dnn.update();
-        */
+    bool isTrain = true;
+    dnn.feedforward(isTrain);
+    if (isTrain) {
+        for (int i=0; i<MAX_ITER; ++i) {
+            /*
+            dnn.feedforward(isTrain);
+            //dnn.calcGradient();
+            dnn.backforward();
+            dnn.calcJacobian();
+            dnn.calcJBJv();
+            dnn.CG();
+            dnn.update();
+            */
+        }
+    }
+    else {
+        dnn.feedforward(false);
     }
 
     dnn.finalize();

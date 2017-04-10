@@ -106,7 +106,7 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename)
     fclose(fp);
 }
 
-int LIBSVM::read_label(int prevSplitId, char *prefix, int rankfordebug)
+int LIBSVM::read_label(int prevSplitId, char *prefix, int labelInit, int rankfordebug)
 {
     char filename[MAX_LEN_FILENAME] = {0};
     snprintf(filename, sizeof(filename), "%s.lbl", prefix);
@@ -123,7 +123,7 @@ int LIBSVM::read_label(int prevSplitId, char *prefix, int rankfordebug)
     LABEL *ptrLbl = this->label;
     while ((line = readline(fp))!=NULL) {
         temp = strtok(line, " \t");
-        *ptrLbl = atoi(temp);
+        *ptrLbl = atoi(temp) - labelInit;
         ++ptrLbl;
     }
     assert(this->numInst == (ptrLbl-this->label));

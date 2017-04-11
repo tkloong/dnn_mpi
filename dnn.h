@@ -32,9 +32,11 @@ class DNN {
         int *numNeurInSet;  // Array of floor(number of neurons in partitions for each layer).
         floatX *weight;     // Weight matrix in this partition. E.g. 28*300, 300*300, 300*1.
         floatX *biases;     // Biases in this partition. E.g. 300, 300, 1.
+        floatX *grad;       // Gradient of the units in output layer
         floatX *X;          // Array of input feature
         int *Y;             // Array of one-hot label for multiclass
         int instBatch;      // For pipeline in function value evaluation
+        double C;           // Regularization coefficient
         int world_rank;     // Rank of the process
         int world_size;     // Number of the processes
         MPI_Comm recvComm;  // recv from previous layer together with split[n] partitions
@@ -79,12 +81,13 @@ class DNN {
         double softmax(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
         double logLoss(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
         double squareLoss(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
+        double squareLossCalc(LABEL *label, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
         double l1Loss(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
         //double (*activationFunc[])(double *);
         void setInstBatch(int batchSize);
         void feedforward(bool isTrain);
         //void calcGradient();
-        void backforward();
+        void backprop();
         void calcJacobian();
         void calcJBJv();
         void CG();

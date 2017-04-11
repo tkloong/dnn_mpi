@@ -353,10 +353,10 @@ void DNN::feedforward(bool isTrain)
 
         (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
 
-        int nextSplitLastId = this->split[curLayer+1] - 1;
         //Calculate function value
         if (isTrain) {
             if (prevSplitId == 0) {
+                int nextSplitLastId = this->split[curLayer+1] - 1;
                 int nextNumNeurInSet = this->numNeurInSet[curLayer+1];
                 int startLbl = nextSplitId * nextNumNeurInSet;
                 int stopLbl = (nextSplitId == nextSplitLastId) ? this->data->numClass : (nextSplitId+1) * nextNumNeurInSet;
@@ -405,7 +405,7 @@ void DNN::feedforward(bool isTrain)
     //printf("[after bcast] rank %d: %d\n", world_rank, global);
 }
 
-void DNN::backforward()
+void DNN::backprop()
 {
 }
 
@@ -465,6 +465,39 @@ double DNN::squareLoss(LABEL *label, double *x, int *inst, int *unit, int *start
 {
     double loss = 0.0;
     double y = 0;
+    this->grad = new double[*unit]();
+
+    printf("squareLoss\n");
+    LABEL *ptrLbl = label;
+    this->numNeuron[this->numLayer];
+    int convertedLbl = 0;
+    for (int i=0; i<*inst; ++i) {
+        convertedLbl = *(label++) - *startLbl;
+        for (int u=0; u<*unit; ++u) {
+            y = *x;
+            if (u == convertedLbl) {
+                y = y - 1.0;
+            }
+            loss += y*y;
+            grad[u] += 2*y;
+            x++;
+        }
+    }
+
+    // Average gradient
+    for (int u=0; u<*unit; ++u) {
+        grad[u] /= this->instBatch;
+        // Gradient of regularization term
+        //grad[u] += *(weight + ) / this->C;
+    }
+
+    printf("loss = %lf\n", loss);
+}
+
+double DNN::squareLossCalc(LABEL *label, double *x, int *inst, int *unit, int *startLbl, int *stopLbl)
+{
+    double loss = 0.0;
+    double y = 0;
     printf("squareLoss\n");
     LABEL *ptrLbl = label;
     this->numNeuron[this->numLayer];
@@ -498,6 +531,7 @@ double DNN::squareLoss(LABEL *label, double *x, int *inst, int *unit, int *start
            */
     }
     printf("loss = %lf\n", loss);
+    return loss;
 }
 
 void DNN::setInstBatch(int batchSize)

@@ -407,6 +407,63 @@ void DNN::feedforward(bool isTrain)
 
 void DNN::backprop()
 {
+    int msgLen = 1;
+    int s = world_rank;
+
+    // Calculate first
+
+    if (curLayer == numLayer - 1) { // Can combine 
+        // Sum up the s for each hidden unit
+        //MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+
+        // Broadcast gradient to shallower layer
+        if (nextSplitId == 0) {
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, prevBcastComm);
+            MPI_Bcast(&s, msgLen, MPI_INT, MPI_ROOT, prevBcastComm);
+            printf("Rank %d sent %d to..\n", world_rank, s);
+        }
+        else {
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, prevBcastComm);
+            MPI_Bcast(&s, msgLen, MPI_INT, MPI_PROC_NULL, prevBcastComm);
+        }
+    }
+    else if (curLayer < numLayer - 1 && curLayer > 0) {
+        // Receive gradient from deeper layer
+        // waitPrevLayer(s, nextBcastComm);
+        MPI_Bcast(&msgLen, 1, MPI_INT, 0, nextBcastComm);
+        MPI_Bcast(&s, msgLen, MPI_INT, 0, nextBcastComm);
+        printf("Rank %d recv %d from ..\n", world_rank, s);
+        s = world_rank;
+
+        // Complete calculation with the gradient
+
+        // Sum up the s for each hidden unit
+        //MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+
+        // Broadcast gradient to shallower layer
+        if (nextSplitId == 0) {
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, prevBcastComm);
+            MPI_Bcast(&s, msgLen, MPI_INT, MPI_ROOT, prevBcastComm);
+            printf("Rank %d sent %d to..\n", world_rank, s);
+        }
+        else {
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, prevBcastComm);
+            MPI_Bcast(&s, msgLen, MPI_INT, MPI_PROC_NULL, prevBcastComm);
+        }
+    }
+    else if (curLayer == 0) {
+        // Receive gradient from deeper layer
+        // waitPrevLayer(s, nextBcastComm);
+        MPI_Bcast(&msgLen, 1, MPI_INT, 0, nextBcastComm);
+        MPI_Bcast(&s, msgLen, MPI_INT, 0, nextBcastComm);
+        printf("Rank %d recv %d from ..\n", world_rank, s);
+        s = world_rank;
+
+        // Complete calculation with the gradient
+
+        // Sum up the s for each hidden unit
+        //MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+    }
 }
 
 void DNN::randomInit()

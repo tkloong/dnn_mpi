@@ -6,7 +6,7 @@
 #include "libsvm.h"
 #include "dnn.h"
 
-#define MAX_ITER 200
+#define MAX_ITER 1
 #define MAX_LEN_FILENAME 128
 
 #define HEART_SCALE // Have to change the core number
@@ -81,13 +81,12 @@ int main(int argc, char** argv) {
     dnn.setInstBatch(2);
 
     bool isTrain = true;
-    dnn.feedforward(isTrain);
     if (isTrain) {
         for (int i=0; i<MAX_ITER; ++i) {
-            /*
             dnn.feedforward(isTrain);
             //dnn.calcGradient();
             dnn.backprop();
+            /*
             dnn.calcJacobian();
             dnn.calcJBJv();
             dnn.CG();

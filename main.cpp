@@ -65,11 +65,10 @@ int main(int argc, char** argv) {
     // Configure NN settings
     DNN dnn;
     dnn.weightInit = &DNN::randomInit;
-    //activationFunc = new fpActvFunc[numLayer] {&DNN::sigmoid, &DNN::sigmoid, &DNN::linear};
-    dnn.activationFunc = new fpActvFunc[numLayer];
+    dnn.activationFunc = new Activation*[numLayer];
     for (int i=0; i<numLayer-1; ++i)
-        dnn.activationFunc[i] = &DNN::sigmoid;
-    dnn.activationFunc[numLayer-1] = &DNN::linear;
+        dnn.activationFunc[i] = new Sigmoid();
+    dnn.activationFunc[numLayer-1] = new Linear();
     dnn.loss = &DNN::squareLoss;
 
     // Initial NN

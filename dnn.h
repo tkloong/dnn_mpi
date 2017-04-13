@@ -10,9 +10,11 @@ extern "C" {
 #include <math.h>
 #include <stdlib.h>
 
+class Activation;
+class Sigmoid;
+class Linear;
 class DNN;
 typedef void (DNN::*fpWeightInit)();
-typedef double (DNN::*fpActvFunc)(double *, int);
 typedef double (DNN::*fpLoss)(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
 typedef double floatX;
 
@@ -33,6 +35,7 @@ class DNN {
         floatX *weight;     // Weight matrix in this partition. E.g. 28*300, 300*300, 300*1.
         floatX *biases;     // Biases in this partition. E.g. 300, 300, 1.
         floatX *grad;       // Gradient of the units in output layer
+        double *z;
         floatX *X;          // Array of input feature
         int *Y;             // Array of one-hot label for multiclass
         int instBatch;      // For pipeline in function value evaluation
@@ -70,7 +73,7 @@ class DNN {
         void finalize();
         //void (DNN::*weightInit)();
         fpWeightInit weightInit;
-        fpActvFunc *activationFunc; // Function pointer array
+        Activation **activationFunc;
         fpLoss loss;
         void randomInit();
         void sparseInit();
@@ -92,6 +95,47 @@ class DNN {
         void calcJBJv();
         void CG();
         void update();
+};
+
+class Activation
+{
+    public:
+        double grad() {};
+        virtual double calc(double *ptr, int len) {};
+};
+
+class Sigmoid : public Activation
+{
+    public:
+        virtual double calc(double *ptr, int len)
+        {
+            printf("sigmoid\n");
+            for (int i=0; i<len; ++i, ++ptr) {
+                if (*ptr >= 0) {
+                    *ptr = 1 / (1 + exp(*ptr));
+                }
+                else {
+                    *ptr = exp(*ptr) / (exp(*ptr) + 1);
+                }
+            }
+        }
+
+        virtual double grad(double *ptr, int len)
+        {
+        }
+};
+
+class Linear : public Activation
+{
+    public:
+        virtual double calc(double *ptr, int len)
+        {
+            printf("Linear\n");
+        }
+
+        virtual double grad(double *ptr, int len)
+        {
+        }
 };
 
 #endif

@@ -282,7 +282,7 @@ void DNN::feedforward(bool isTrain)
     int mn = m * n;
     int msgLen = mn;
     double *s = new double[mn*sizeof(double)];  // linear mapping of X*W
-    double *global = new double[mn*sizeof(double)];  // linear mapping of X*W
+    z = new double[mn*sizeof(double)];  // linear mapping of X*W
     printf("mn = %d\n", mn);
 
     if (curLayer == 0) {
@@ -295,9 +295,9 @@ void DNN::feedforward(bool isTrain)
                     m, n, k, alpha, X, k, weight, n, beta, s, n);
             
             // Sum up the s for each hidden unit
-            MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+            MPI_Allreduce(s, z, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
 
-            (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
+            this->activationFunc[curLayer]->calc(z, mn);
 
             // Broadcast from master to the next layer (Ensure at least one 
             // partition's buffer is empty to avoid deadlock)
@@ -324,9 +324,9 @@ void DNN::feedforward(bool isTrain)
                 m, n, k, alpha, s, k, weight, n, beta, s, n);
         
         // Sum up the s for each hidden unit
-        MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+        MPI_Allreduce(s, z, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
 
-        (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
+        this->activationFunc[curLayer]->calc(z, mn);
 
         // broadcast(s, nextBcastComm, curLayer, prevSplitId);
         msgLen = mn;
@@ -349,9 +349,9 @@ void DNN::feedforward(bool isTrain)
                 m, n, k, alpha, s, k, weight, n, beta, s, n);
 
         // Sum up the s for each hidden unit
-        MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+        MPI_Allreduce(s, z, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
 
-        (this->*((DNN*)this)->DNN::activationFunc[curLayer])(s, mn);
+        this->activationFunc[curLayer]->calc(z, mn);
 
         //Calculate function value
         if (isTrain) {

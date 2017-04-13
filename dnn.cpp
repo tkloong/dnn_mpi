@@ -363,7 +363,7 @@ void DNN::feedforward(bool isTrain)
 
                 printf("LAST LAYER: %d (from rank %d)\n", startLbl, world_rank);
 
-                (this->*((DNN*)this)->DNN::loss)(this->data->label, s, &m, &n, &startLbl, &stopLbl);
+                (this->*((DNN*)this)->DNN::loss)(this->data->label, z, &m, &n, &startLbl, &stopLbl);
             }
 
         }

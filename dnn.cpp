@@ -132,7 +132,7 @@ void DNN::initLayerId()
         this->masterId[l] = total;
     }
 
-    this->layerId = new int[total];  // This can be change to scalar since each
+    this->layerId = new int[world_size];  // This can be change to scalar since each
                                      // partition know its layerId is enough
     int nLayer = 0;
     for (int i=0; i<world_size; ++i) {
@@ -507,7 +507,7 @@ double DNN::relu(double *ptr, int len)
     printf("relu\n");
     for (int i=0; i<len; ++i, ++ptr) {
         //*ptr = *((int*)ptr) & 0x7fffffff;
-        if (*ptr < 0) {
+        if (*ptr <= 0) {
             *ptr = 0;
         }
     }

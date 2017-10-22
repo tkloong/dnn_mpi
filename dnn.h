@@ -10,6 +10,8 @@ extern "C" {
 #include <math.h>
 #include <stdlib.h>
 
+#define SIGNAL_MAX_LEN 128
+
 class Activation;
 class Sigmoid;
 class Linear;
@@ -17,10 +19,14 @@ class DNN;
 typedef void (DNN::*fpWeightInit)();
 typedef double (DNN::*fpLoss)(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
 typedef double floatX;
+typedef struct {
+    int rank;
+    char msg[SIGNAL_MAX_LEN];
+} Signal;
 
 class DNN {
     private:
-        int numLayer;       // Total number of layer for this NN.
+        int numLayer;       // Total number of layer for this NN, excluding input layer.
         int curLayer;       // Layer Id in this partition.
         int *numNeuron;     // Array of number of neuron for this NN structure. E.g. 28-300-300-1.
         int *split;         // Split structure for this NN. E.g. 2-2-1-1.
@@ -64,6 +70,10 @@ class DNN {
 
     public:
         DNN();
+        MPI_Datatype Mpi_signal;
+        Signal sendBuf;
+        Signal *recvBuf;
+        void CreateSignalType (Signal *signal);
         virtual void initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split);
         void readInput(char *prefixFilename, char *datafile=NULL, INST_SZ numInst=0, INST_SZ numClass=0, FEAT_SZ numFeat=0, int labelInit=-1, bool isFileExist=true);
         void readWeightFromFile(char *filename);

@@ -1,6 +1,24 @@
 #include <string.h>
 #include <time.h>
+#include <exception>
 #include "dnn.h"
+#include <stddef.h>
+
+#define ROOT_GATHER_ALL(...) \
+    sendBuf.rank = (this->world_rank); \
+    sprintf(sendBuf.msg, __VA_ARGS__); \
+    MPI_Gather(&sendBuf, 1, Mpi_signal, recvBuf, 1, Mpi_signal, 0, MPI_COMM_WORLD)
+
+#define DISPLAY_SIGNAL \
+    if (this->world_rank == 0) { \
+        for (int i=0; i<this->world_size; ++i) { \
+            printf("%s", (recvBuf[i]).msg); \
+        } \
+    }
+
+#define DISP_GATHER_ALL(...) \
+    ROOT_GATHER_ALL(__VA_ARGS__); \
+    DISPLAY_SIGNAL
 
 DNN::DNN()
 {
@@ -71,6 +89,13 @@ void DNN::initMPI(int argc, char **argv)
     // Get the group of processes in MPI_COMM_WORLD
     //MPI_Group world_group;
     //MPI_Comm_group(MPI_COMM_WORLD, &world_group);
+
+    if (this->world_rank == 0) {
+        recvBuf = (Signal *)malloc(this->world_size*sizeof(Signal));
+    }
+
+    Signal my_signal;
+    CreateSignalType(&my_signal);
 }
 
 void DNN::formMPIGroup()
@@ -106,7 +131,7 @@ void DNN::formMPIGroup()
 
     if (curLayer < numLayer - 1) {
         //printf ("[reduce %d] (rank %d/%d)worldRank %d: %d\n", curLayer, reduceRank, reduceSize, world_rank, masterId[curLayer+1] + (nextSplitId*split[curLayer+2]));
-        ierr = MPI_Intercomm_create(reduceComm, 0, MPI_COMM_WORLD, 
+        ierr = MPI_Intercomm_create(reduceComm, 0, MPI_COMM_WORLD,
                 masterId[curLayer+1] + (nextSplitId*split[curLayer+2]), bcastTag, &nextBcastComm);
         MPI_Comm_rank(nextBcastComm, &bcastRank);
         MPI_Comm_size(nextBcastComm, &bcastSize);
@@ -115,12 +140,42 @@ void DNN::formMPIGroup()
 
     if (curLayer > 0) {
         //printf ("[recv %d] (rank %d/%d)worldRank %d: %d\n", curLayer, recvRank, recvSize, world_rank, masterId[curLayer-1] + prevSplitId);
-        ierr = MPI_Intercomm_create(recvComm, 0, MPI_COMM_WORLD, 
+        ierr = MPI_Intercomm_create(recvComm, 0, MPI_COMM_WORLD,
                 masterId[curLayer-1] + prevSplitId, bcastTag, &prevBcastComm);
         MPI_Comm_rank(prevBcastComm, &bcastRank);
         MPI_Comm_size(prevBcastComm, &bcastSize);
         //printf ("[bcastComm] curLayer=%d (rank %d/%d) worldRank %d -> master:%d\n", curLayer, bcastRank, bcastSize, world_rank, masterId[curLayer-1] + prevSplitId);
     }
+}
+
+void DNN::CreateSignalType(Signal *isignal) {
+    Signal *signal = new Signal;
+    int blocklens[2];              /*Block Lengths of data in structure*/
+    MPI_Datatype old_types[2];     /*Data types of data in structure*/
+    MPI_Aint indices[2];           /*Byte displacement of each piece of data*/
+    MPI_Aint addr1, addr2, baseaddr;
+
+    /*Set block lengths*/
+    blocklens[0] = 1;
+    blocklens[1] = SIGNAL_MAX_LEN;
+
+    /*Set Data Types*/
+    old_types[0] = MPI_INT;
+    old_types[1] = MPI_CHAR;
+
+    /*Set byte displacement for each piece of data in structure*/
+    //MPI_Aint array_of_displacements[] = { offsetof( Signal, rank ),
+    //                                        offsetof( Signal, msg ) };
+    MPI_Get_address(signal, &baseaddr);
+    MPI_Get_address(&signal->rank, &addr1);
+    MPI_Get_address(signal->msg, &addr2);
+    indices[0] = addr1 - baseaddr;
+    indices[1] = addr2 - baseaddr;
+
+    /*Create structure type in MPI so that we can transfer boundaries between nodes*/
+    MPI_Type_create_struct(2,blocklens,indices,old_types,&(DNN::Mpi_signal));
+    MPI_Type_commit(&(DNN::Mpi_signal));
+    return;
 }
 
 void DNN::initLayerId()
@@ -143,6 +198,8 @@ void DNN::initLayerId()
         this->layerId[i] = nLayer;
     }
     this->curLayer = this->layerId[this->world_rank];
+
+    DISP_GATHER_ALL("Partition %d: layer %d\n", this->world_rank, this->curLayer);
 }
 
 void DNN::initSplitId()
@@ -186,6 +243,11 @@ void DNN::allocWeight()
         prevEle = prevNumNeurInSet;
         nextEle = nextNumNeurInSet;
     }
+    /*
+       prevEle = prevNumNeurInSet;
+       nextEle = nextNumNeurInSet;
+       */
+    DISP_GATHER_ALL("Partition %d: prevEle = %d, nextEle = %d, W = %d x %d\n", world_rank, prevNumNeurInSet, nextNumNeurInSet, prevEle, nextEle);
     this->weight = new floatX[prevEle * nextEle];
 }
 
@@ -470,7 +532,7 @@ void DNN::randomInit()
 {
     double accum;
     int total = prevEle * nextEle;
-    printf("%d: %d x %d = %d\n", world_rank, prevEle, nextEle, total);
+    DISP_GATHER_ALL("[randomInit] Partition %d: %d x %d = %d\n", world_rank, prevEle, nextEle, total);
     floatX *pWei = weight;
     for (int i=0; i<total; ++i) {
         accum = 0;

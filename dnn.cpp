@@ -543,6 +543,124 @@ void DNN::backprop()
     }
 }
 
+void DNN::calcJacobian()
+{
+    int batchSize = this->instBatch;  // Function pipeline
+    int l = data->getNumInst()/batchSize;  // Be attention on remainder
+    int n = nextEle;
+    int k = prevEle;
+    int n_L = numNeuron[numLayer];
+    int ln = l * n;
+    int lun = l * n_L * n;
+    int luk = l * n_L * k;
+    int msgLen = lun;
+
+    double *dzudz = new double[lun]();
+    double *dzdb = new double[lun]();  // This is local M
+    global_dzds = new double[lun]();  // This is M
+
+    if (curLayer == numLayer - 1) { // Can combine
+        for (int i=0; i<l; ++i) {
+            for (int j=0; j<n_L; ++j) {
+                GET(dzudz, l, n_L, n_L, i, j, j) = 1.0;
+            }
+        }
+    }
+    else if (curLayer < numLayer - 1) {
+        // Receive dzudz from deeper layer
+        MPI_Bcast(&msgLen, 1, MPI_INT, 0, nextBcastComm);
+        MPI_Bcast(dzudz, msgLen, MPI_DOUBLE, 0, nextBcastComm);
+    }
+
+    // Calculate DZ
+    double *zGrad = this->activationFunc[curLayer]->grad(z, ln);
+    double *dzudzPrev = new double[luk]();
+    double *global_dzudzPrev = new double[luk]();
+
+    // Calculate M^m
+    double *ptr_dzdb = dzdb;
+    double *ptr_dzudz = dzudz;
+    for (int i=0; i<l; ++i) {
+        for (int u=0; u<n_L; ++u) {
+            for (int j=0; j<n; ++j) {
+                *(ptr_dzdb++) = *(ptr_dzudz++) * GET(zGrad, l, n, i, j);
+            }
+        }
+    }
+
+    // All reduce dzdb
+    DNNOp_Allred_Dzds(dzdb, global_dzds, lun, MPI_DOUBLE, MPI_SUM, reduceComm);
+
+    // Broadcast dzudzPrev to shallower layer
+    if (curLayer != 0) {
+        DNNOp_Comp_DzudzPrev(global_dzds, l, n_L, n, weight, k, n, dzudzPrev, l, n_L, k);
+
+        // All reduce dzudzPrev
+        DNNOp_Allred_DzudzPrev(dzudzPrev, global_dzudzPrev, luk, MPI_DOUBLE, MPI_SUM, reduceComm);
+
+        // Broadcast gradient to shallower layer
+        msgLen = lun;
+        if (nextSplitId == 0) {
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, prevBcastComm);
+            MPI_Bcast(global_dzudzPrev, msgLen, MPI_DOUBLE, MPI_ROOT, prevBcastComm);
+#if DEBUG == true
+#endif
+        }
+        else {
+            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, prevBcastComm);
+            MPI_Bcast(global_dzudzPrev, msgLen, MPI_DOUBLE, MPI_PROC_NULL, prevBcastComm);
+        }
+    }
+
+    //delete[] dzudz;
+    //delete[] dzdb;
+    //delete[] zGrad;
+    //delete[] dzudzPrev;
+    //delete[] global_dzudzPrev;
+}
+
+double* DNN::calcJBJv(double *v)
+{
+    double *Pbar = Jv(v);
+    return JTv(Pbar);
+}
+
+double* DNN::Jv(double *v)
+{
+    int batchSize = this->instBatch;  // Function pipeline
+    int l = data->getNumInst()/batchSize;  // Be attention on remainder
+    int n = nextEle;
+    int k = prevEle;
+    int n_L = numNeuron[numLayer];
+
+    double *Pbar = new double[n_L * l];
+
+    // corresponding to weights' gradient
+    DNNOp_Comp_MPTZT(global_dzds, l, n_L, n, dLdw, k, n, z, l, k, Pbar, n_L, l);
+
+    // corresponding to biases' gradient. Note that biases are stored only in master partitions
+
+    return Pbar;
+}
+
+double* DNN::JTv(double *Pbar)
+{
+    int batchSize = this->instBatch;  // Function pipeline
+    int l = data->getNumInst()/batchSize;  // Be attention on remainder
+    int n = nextEle;
+    int k = prevEle;
+    int n_L = numNeuron[numLayer];
+
+    double *delta = new double[k * n];
+
+    // corresponding to weights' gradient
+    DNNOp_Comp_ZTPbarTM(z, k, l, Pbar, n_L, l, global_dzds, l, n_L, n, delta, k, n);
+
+    // corresponding to biases' gradient. Note that biases are stored only in master partitions
+
+    return delta;
+}
+
 void DNN::randomInit()
 {
     double accum;

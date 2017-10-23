@@ -1,6 +1,13 @@
 #include <string.h>
 #include <time.h>
 #include "dnn.h"
+#define DEBUG true
+
+#define GET_MACRO(_0,_1,_2,_3,_4,_5,_6,NAME,...) NAME
+#define GET(...) GET_MACRO(__VA_ARGS__, GET3D, null, GET2D)(__VA_ARGS__)
+
+#define GET2D(mat, d1, d2, x, y) (*(mat + (x)*(d2) + (y)))
+#define GET3D(mat, d1, d2, d3, x, y, z) (*(mat + (x)*(d2)*(d3) + (y)*(d3) + (z)))
 
 DNN::DNN()
 {
@@ -273,6 +280,7 @@ void DNN::finalize()
 
 void DNN::feedforward(bool isTrain)
 {
+    this->C = data->getNumInst()/instBatch;  // Be attention on remainder
     int batchSize = this->instBatch;  // Function pipeline
     double alpha = 1.0;
     double beta = 0.0;
@@ -407,62 +415,131 @@ void DNN::feedforward(bool isTrain)
 
 void DNN::backprop()
 {
-    int msgLen = 1;
+    double alpha = 1.0;
+    double beta = 0.0;
     int s = world_rank;
+    int batchSize = this->instBatch;  // Function pipeline
+    int m = data->getNumInst()/batchSize;  // Be attention on remainder
+    int n = nextEle;
+    int k = prevEle;
+    int mn = m * n;
+    int mk = m * k;
+    int kn = k * n;
+    int msgLen = mn;
 
-    // Calculate first
+    // temporary //
+    double *zPrev = new double[mk]();
+    //
+    double *zGrad = this->activationFunc[curLayer]->grad(z, mn);
+    double *dLds = new double[mn]();
+    int u = numNeuron[numLayer];
+    int mun = m * u * n;
+    dLdw = new double[kn]();
+    dLdb = new double[n]();
+    double *dLdw_i = new double[kn]();
+    double *dLdzPrev = new double[mk]();
+    double *global_dLdzPrev = new double[mk]();
+    if (curLayer == numLayer - 1) { // Can combine
+        //dLds = new double[mn]();  // dLds is a diagonal matrix only in the last layer,
+        // so we reduce the memory to mn of elements.
 
-    if (curLayer == numLayer - 1) { // Can combine 
-        // Sum up the s for each hidden unit
-        //MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+        // Activation gradient. Element-wise vector-vector multiplication
+        for (int i=0; i<mn; ++i) {
+            dLds[i] = this->dLdz[i] * zGrad[i];  // dLds is a diagonal matrix only in the last layer
+        }
+
+        DNNOp_Comp_Grad(zPrev, m, k, dLds, m, n, dLdw, k, n, dLdb);
+
+        // Calculate dLdzPrev = W * dLds
+        // dLdzPrev =[] m * k; dLds =[] m * n; W =[] k * n;
+        // Note that in the last layer, #neurons n = u.
+        // The following line should changed.
+        //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+        //    m, k, n, alpha, dLds, n, weight, n, beta, dLdzPrev, k);
+
+        DNNOp_Comp_ShallowError(curLayer, weight, k, n, dLds, m, n, dLdzPrev, m, k);
+        //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+        //   m, k, n, alpha, dLds, n, weight, n, beta, dLdzPrev, k);
+
+        DNNOp_Allred_ShallowError(dLdzPrev, global_dLdzPrev, mk, MPI_DOUBLE, MPI_SUM, reduceComm);
+
+        //MPI_Allreduce(dLdzPrev, global_dLdzPrev, mk, MPI_DOUBLE, MPI_SUM, reduceComm);
 
         // Broadcast gradient to shallower layer
+        msgLen = mk;
         if (nextSplitId == 0) {
             MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, prevBcastComm);
-            MPI_Bcast(&s, msgLen, MPI_INT, MPI_ROOT, prevBcastComm);
+            MPI_Bcast(global_dLdzPrev, msgLen, MPI_DOUBLE, MPI_ROOT, prevBcastComm);
+#if DEBUG == true
             printf("Rank %d sent %d to..\n", world_rank, s);
+#endif
         }
         else {
             MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, prevBcastComm);
-            MPI_Bcast(&s, msgLen, MPI_INT, MPI_PROC_NULL, prevBcastComm);
+            MPI_Bcast(global_dLdzPrev, msgLen, MPI_DOUBLE, MPI_PROC_NULL, prevBcastComm);
         }
     }
     else if (curLayer < numLayer - 1 && curLayer > 0) {
+        dLdz = new double[mn]();
         // Receive gradient from deeper layer
         // waitPrevLayer(s, nextBcastComm);
         MPI_Bcast(&msgLen, 1, MPI_INT, 0, nextBcastComm);
-        MPI_Bcast(&s, msgLen, MPI_INT, 0, nextBcastComm);
-        printf("Rank %d recv %d from ..\n", world_rank, s);
+        MPI_Bcast(dLdz, msgLen, MPI_DOUBLE, 0, nextBcastComm);
+#if DEBUG == true
+        printf("Rank %d(curLayer: %d) recv %d from ..\n", world_rank, curLayer, s);
+#endif
         s = world_rank;
 
-        // Complete calculation with the gradient
+        // Activation gradient. Element-wise vector-vector multiplication
+        for (int i=0; i<mn; ++i) {
+            dLds[i] = dLdz[i] * zGrad[i];
+        }
 
-        // Sum up the s for each hidden unit
-        //MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+        DNNOp_Comp_Grad(zPrev, m, k, dLds, m, n, dLdw, k, n, dLdb);
+
+        DNNOp_Comp_ShallowError(curLayer, weight, k, n, dLds, m, n, dLdzPrev, m, k);
+
+        DNNOp_Allred_ShallowError(dLdzPrev, global_dLdzPrev, mk, MPI_DOUBLE, MPI_SUM, reduceComm);
 
         // Broadcast gradient to shallower layer
+        msgLen = mk;
         if (nextSplitId == 0) {
             MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, prevBcastComm);
-            MPI_Bcast(&s, msgLen, MPI_INT, MPI_ROOT, prevBcastComm);
+            MPI_Bcast(global_dLdzPrev, msgLen, MPI_DOUBLE, MPI_ROOT, prevBcastComm);
+#if DEBUG == true
             printf("Rank %d sent %d to..\n", world_rank, s);
+#endif
         }
         else {
             MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, prevBcastComm);
-            MPI_Bcast(&s, msgLen, MPI_INT, MPI_PROC_NULL, prevBcastComm);
+            MPI_Bcast(global_dLdzPrev, msgLen, MPI_DOUBLE, MPI_PROC_NULL, prevBcastComm);
         }
     }
     else if (curLayer == 0) {
+        dLdz = new double[mn]();
+
         // Receive gradient from deeper layer
         // waitPrevLayer(s, nextBcastComm);
         MPI_Bcast(&msgLen, 1, MPI_INT, 0, nextBcastComm);
-        MPI_Bcast(&s, msgLen, MPI_INT, 0, nextBcastComm);
+        MPI_Bcast(dLdz, msgLen, MPI_DOUBLE, 0, nextBcastComm);
+#if DEBUG == true
         printf("Rank %d recv %d from ..\n", world_rank, s);
+#endif
         s = world_rank;
 
-        // Complete calculation with the gradient
+        // Activation gradient. Element-wise vector-vector multiplication
+        for (int i=0; i<mn; ++i) {
+            dLds[i] = dLdz[i] * zGrad[i];
+        }
 
-        // Sum up the s for each hidden unit
-        //MPI_Allreduce(s, global, mn, MPI_DOUBLE, MPI_SUM, reduceComm);
+        DNNOp_Comp_Grad(zPrev, m, k, dLds, m, n, dLdw, k, n, dLdb);
+
+        // Calculate dLdzPrev = W * dLds, one row of z, dLds = one instance
+        //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+        //    m, k, n, alpha, dLds, n, weight, n, beta, dLdzPrev, k);
+
+        // Sum up the dLdzPrev for each hidden unit (Last layer don't need to do reduce)
+        //MPI_Allreduce(dLdzPrev, global_dLdzPrev, mk, MPI_DOUBLE, MPI_SUM, reduceComm);
     }
 }
 
@@ -470,7 +547,9 @@ void DNN::randomInit()
 {
     double accum;
     int total = prevEle * nextEle;
+#if DEBUG == true
     printf("%d: %d x %d = %d\n", world_rank, prevEle, nextEle, total);
+#endif
     floatX *pWei = weight;
     for (int i=0; i<total; ++i) {
         accum = 0;
@@ -481,7 +560,9 @@ void DNN::randomInit()
 
 void DNN::sparseInit()
 {
+#if DEBUG == true
     printf("sparseInit\n");
+#endif
 }
 
 double DNN::linear(double *x, int len)
@@ -523,6 +604,7 @@ double DNN::squareLoss(LABEL *label, double *x, int *inst, int *unit, int *start
     double loss = 0.0;
     double y = 0;
     this->grad = new double[*unit]();
+    this->dLdz = new double[*inst * *unit]();
 
     printf("squareLoss\n");
     LABEL *ptrLbl = label;
@@ -536,7 +618,8 @@ double DNN::squareLoss(LABEL *label, double *x, int *inst, int *unit, int *start
                 y = y - 1.0;
             }
             loss += y*y;
-            grad[u] += 2*y;
+            dLdz[i * *unit + u] = 2*y;
+            grad[u] += dLdz[i * *unit + u];
             x++;
         }
     }
@@ -594,5 +677,140 @@ double DNN::squareLossCalc(LABEL *label, double *x, int *inst, int *unit, int *s
 void DNN::setInstBatch(int batchSize)
 {
     this->instBatch = batchSize;
+}
+
+void DNN::CG()
+{
+    double *p = dLdtheta;
+    double *Mv;
+    for (int j=0; j<NEWTON_ITER; ++j) {
+        Mv = calcJBJv(p);
+    }
+}
+
+void DNN::DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dLds, int dLds_m, int dLds_n, double *dLdw, int dLdw_m, int dLdw_n, double *dLdb)
+    // Calculate the outer product dLdW = zPrev * dLds^T, one row of z, dLds = one instance
+    // dLdw =[] k * n; zPrev =[] m * k; dLds =[] m * n;
+{
+    double alpha = 1.0;
+    double beta = 0.0;
+    //int m = data->getNumInst()/batchSize;  // Be attention on remainder
+    //int n = nextEle;
+    int m = dLdw_m;
+    int n = dLdw_n;
+    int k = prevEle;
+    //int u = numNeuron[numLayer];
+    int mn = dLdw_m * dLdw_n;
+    int mk = zPrev_m * zPrev_k;
+    int kn = zPrev_k * dLdw_n;
+    int msgLen = mn;
+    double *dLdw_i = new double[kn]();
+
+    for (int i=0; i<m; ++i) {
+        // Outer product of zPrev^T * dLds
+        cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                k, n, 1, alpha, zPrev+i*k, k, dLds+i*n, n, beta, dLdw_i, n);
+        for (int i=0; i<kn; ++i)
+            dLdw[i] += dLdw_i[i];
+    }
+
+    // Add weight gradient of regularization terms
+    for (int i=0; i<kn; ++i) {
+        dLdw[i] += dLdw[i] / m + weight[i] / C;
+    }
+
+    // Calculate bias' gradient. Note that biases are stored only in master partitions
+    if (prevSplitId == 0) {
+        for (int r=0; r<m; ++r) {
+            for (int c=0; c<n; ++c) {
+                dLdb[c] += dLds[c];
+            }
+        }
+
+        for (int c=0; c<n; ++c) {
+            dLdb[c] /= m;
+            dLdb[c] += biases[c] / C;
+        }
+    }
+
+    // Organize the gradient of weight and biases
+}
+
+void DNN::DNNOp_Comp_ShallowError(int layer, double *weight, int weight_k, int weight_n, double *dLds, int dLds_m, int dLds_n, double *dLdzPrev, int dLdzPrev_m, int dLdzPrev_k)
+    // Calculate dLdzPrev = dLds * W^T.
+    // Dimensions -> dLds =[] m * n; W =[] k * n; dLdzPrev =[] m * k;
+    //   where m: #instances; k: n_{m-1}; n: n_m.
+{
+    double alpha = 1.0;
+    double beta = 0.0;
+
+    // Calculate dLdzPrev = dLds * W, one row of z, dLds = one instance
+    // dLds =[] m * n; W =[] k * n;  op( W ) =[] n * k; dLdzPrev =[] m * k;
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+            dLds_m, weight_k, dLds_n, alpha, dLds, dLds_n, weight, weight_n, beta, dLdzPrev, dLdzPrev_k);
+}
+
+void DNN::DNNOp_Comp_DzudzPrev(double *global_dzds, int global_dzdb_l, int global_dzdb_n_L, int global_dzdb_n, double *weight, int weight_k, int weight_n, double *dzudzPrev, int dzudzPrev_l, int dzudzPrev_n_L, int dzudzPrev_k)
+{
+    double alpha = 1.0;
+    double beta = 0.0;
+
+    int stride_inst = global_dzdb_n_L * global_dzdb_n;
+
+    // Calculate dzudzPrev = dzdb * W^T along instance dimension, one row of z, dLds = one instance
+    // dzdb =[] l * n_L * n; W =[] k * n;  op( W ) =[] n * k; dzudzPrev =[] l * n_L * k;
+    for (int i=0; i<global_dzdb_l; ++i) {
+        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
+                global_dzdb_n_L, weight_k, global_dzdb_n, alpha, global_dzds + i*stride_inst, global_dzdb_n, weight, weight_n, beta, dzudzPrev, dzudzPrev_k);
+    }
+}
+
+void DNN::DNNOp_Comp_MPTZT(double *M, int M_l, int M_n_L, int M_n, double *P, int P_k, int P_n, double *Z, int Z_l, int Z_k, double *Pbar, int Pbar_n_L, int Pbar_l)
+{
+    double alpha = 1.0;
+    double beta = 0.0;
+
+    double *tmp = new double[P_k*Z_l];
+
+    // OP(P) =[] n * k; OP(Z) =[] k * l; tmp =[] n * l;
+    cblas_dgemm(CblasRowMajor, CblasTrans, CblasTrans,
+            P_n, Z_l, P_k, alpha, P, P_n, Z, Z_k, beta, tmp, Z_l);
+
+    int stride_inst = M_n_L * M_n;
+    for (int i=0; i<M_l; ++i) {
+        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                M_n_L, 1, M_n, alpha, M + i*stride_inst, M_n, tmp + i, Z_l, beta, Pbar + i, Pbar_l);
+    }
+}
+
+void DNN::DNNOp_Comp_ZTPbarTM(double *Z, int Z_k, int Z_l, double *Pbar, int Pbar_n_L, int Pbar_l, double *M, int M_l, int M_n_L, int M_n, double *delta, int delta_k, int delta_n)
+{
+    double alpha = 1.0;
+    double beta = 0.0;
+
+    double *tmp = new double[Pbar_l * M_n];
+
+    int stride_inst = M_n_L * M_n;
+    for (int i=0; i<M_l; ++i) {
+        // Pbar =[] n_L * l; M =[] n_L * n;
+        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                Pbar_n_L, M_n, 1, alpha, Pbar + i, Pbar_l, M + i*stride_inst, M_n, beta, tmp + i*M_n, M_n);
+    }
+}
+
+int DNN::DNNOp_Allred_ShallowError(void *dLdzPrev, void *global_dLdzPrev, int mk, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
+    // Sum up the dLdzPrev for each hidden unit
+{
+    return MPI_Allreduce(dLdzPrev, global_dLdzPrev, mk, datatype, op, comm);
+}
+
+int DNN::DNNOp_Allred_Dzds(void *dzdb, void *global_dzds, int lun, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
+{
+    return MPI_Allreduce(dzdb, global_dzds, lun, datatype, op, comm);
+}
+
+int DNN::DNNOp_Allred_DzudzPrev(void *dzudzPrev, void *global_dzudzPrev, int luk, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)
+{
+    return MPI_Allreduce(dzudzPrev, global_dzudzPrev, luk, datatype, op, comm);
 }
 

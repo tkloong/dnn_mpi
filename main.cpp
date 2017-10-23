@@ -85,10 +85,9 @@ int main(int argc, char** argv) {
             dnn.feedforward(isTrain);
             //dnn.calcGradient();
             dnn.backprop();
-            /*
             dnn.calcJacobian();
-            dnn.calcJBJv();
             dnn.CG();
+            /*
             dnn.update();
             */
         }

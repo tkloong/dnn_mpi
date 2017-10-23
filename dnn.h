@@ -3,9 +3,10 @@
 
 #include "libsvm.h"
 #include "libsvm.hpp"
-extern "C" {
-#include <cblas.h>
-}
+//extern "C" {
+//#include <cblas.h>
+//}
+#include "mkl.h"
 #include <mpi.h>
 #include <math.h>
 #include <stdlib.h>
@@ -40,11 +41,15 @@ class DNN {
         int *numNeurInSet;  // Array of floor(number of neurons in partitions for each layer).
         floatX *weight;     // Weight matrix in this partition. E.g. 28*300, 300*300, 300*1.
         floatX *biases;     // Biases in this partition. E.g. 300, 300, 1.
-        floatX *grad;       // Gradient of the units in output layer
-        double *z;
+        floatX *dXidZ;      // Gradient of the units in output layer
+        //floatX *dXids;      // Gradient of the units in output layer
+        floatX *dXidW;      // Gradient of the units in output layer
+        floatX *dXidb;      // Gradient of the units in output layer
+        double *z;			// instance rows by n_m columns
+        double *zPrev;		// instance rows by n_{m-1} columns
         floatX *X;          // Array of input feature
         int *Y;             // Array of one-hot label for multiclass
-        int instBatch;      // For pipeline in function value evaluation
+        int batchSize;      // For pipeline in function value evaluation
         double C;           // Regularization coefficient
         int world_rank;     // Rank of the process
         int world_size;     // Number of the processes
@@ -59,6 +64,7 @@ class DNN {
         MPI_Group reduceGrp;
         void allocWeight();
         void allocBiases();
+        void allocGradient();
         void initMPI(int, char**);
         void initLayerId();
         void initSplitId();
@@ -110,7 +116,7 @@ class DNN {
 class Activation
 {
     public:
-        double grad() {};
+        virtual floatX* grad(double *ptr, int len) {};
         virtual double calc(double *ptr, int len) {};
 };
 
@@ -130,8 +136,14 @@ class Sigmoid : public Activation
             }
         }
 
-        virtual double grad(double *ptr, int len)
+        virtual floatX* grad(double *ptr, int len)
         {
+            floatX *grad = new floatX[len];
+            floatX *pGrad = grad;
+            for (int i=0; i<len; ++i, ++pGrad) {
+                *pGrad = *(ptr+i) * (1.0 - *(ptr+i));
+            }
+            return grad;
         }
 };
 
@@ -143,7 +155,7 @@ class Linear : public Activation
             printf("Linear\n");
         }
 
-        virtual double grad(double *ptr, int len)
+        virtual floatX* grad(double *ptr, int len)
         {
         }
 };

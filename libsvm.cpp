@@ -12,6 +12,24 @@ LIBSVM::~LIBSVM()
         delete[] this->label;
 }
 
+int* LIBSVM::initFeatSplit(int numNeuron, int split, int prevSplitId)
+{
+    this->featSplit = split;
+    this->featSet = new int[featSplit+1];
+    int normSet = numNeuron / featSplit;
+    int lastSet = numNeuron - normSet * (featSplit - 1);
+    floatX *ptrFeat;
+    int *ptrIdx;
+    featSet[0] = 1;
+    for (int s=1; s<=featSplit; ++s) featSet[s] = featSet[s-1] + normSet;
+    featSet[featSplit] = featSet[featSplit-1] + lastSet;
+    if (prevSplitId != split - 1)
+        this->numFeat = normSet;
+    else
+        this->numFeat = lastSet;
+    return featSet;
+}
+
 int LIBSVM::libsvm_read(const char* datafile, INST_SZ start, INST_SZ stop)
 {
     char *line;
@@ -29,11 +47,11 @@ int LIBSVM::libsvm_read(const char* datafile, INST_SZ start, INST_SZ stop)
     //this->label = safeMalloc(LABEL, this->numInst);
     this->label = new LABEL[this->numInst];
     if (this->label == NULL) return ERR_NEW;
-    this->idx = new IDX[this->numInst * numFeat];
+    this->idx = new IDX[this->numInst * totalFeat];
     if (this->idx == NULL) return ERR_NEW;
-    this->feat = new FEAT[this->numInst * numFeat];
+    this->feat = new FEAT[this->numInst * totalFeat];
     if (this->feat == NULL) return ERR_NEW;
-    this->ptrInst = new int[this->numInst + 1];
+    this->ptrInst = new int[this->numInst + 1]();
     if (this->ptrInst == NULL) return ERR_NEW;
 
     char *temp;
@@ -51,7 +69,7 @@ int LIBSVM::libsvm_read(const char* datafile, INST_SZ start, INST_SZ stop)
             *(this->feat + idx) = strtod(strtok(NULL, " \t"), NULL);
 
             ++idx;
-        } 
+        }
         ++instId;
         *(this->ptrInst + instId) = idx;
     }
@@ -73,10 +91,10 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename)
     }
 
     // Initialize
-    int numFeatSplit = numFeat / featSplit + 1;
-    this->idx = new IDX[this->numInst * numFeatSplit];
+    this->idx = new IDX[this->numInst * this->numFeat];
     if (this->idx == NULL) err(2, "Allocation error");
-    this->feat = new FEAT[this->numInst * numFeatSplit];
+    if (this->feat != NULL) delete[] this->feat;
+    this->feat = new FEAT[this->numInst * this->numFeat];
     if (this->feat == NULL) err(2, "Allocation error");
     this->ptrInst = new int[this->numInst + 1];
     if (this->ptrInst == NULL) err(2, "Allocation error");
@@ -95,7 +113,7 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename)
 
             temp = strtok(NULL, " :\n");
             ++idx;
-        } 
+        }
         ++numInst;
         *(this->ptrInst + numInst) = idx;
     }
@@ -104,29 +122,6 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename)
     assert(this->numInst == numInst);
 
     fclose(fp);
-}
-
-int LIBSVM::read_label(int prevSplitId, char *prefix, int labelInit, int rankfordebug)
-{
-    char filename[MAX_LEN_FILENAME] = {0};
-    snprintf(filename, sizeof(filename), "%s.lbl", prefix);
-    FILE *fp = fopen(filename, "r");
-    if (fp == NULL) return ERR_READ;
-
-    this->label = new LABEL[this->numInst];
-    if (this->label == NULL) return ERR_NEW;
-
-    char *temp;
-    char *line;
-    LABEL instId = 0;
-    IDX idx = 0;
-    LABEL *ptrLbl = this->label;
-    while ((line = readline(fp))!=NULL) {
-        temp = strtok(line, " \t");
-        *ptrLbl = atoi(temp) - labelInit;
-        ++ptrLbl;
-    }
-    assert(this->numInst == (ptrLbl-this->label));
 }
 
 void LIBSVM::export_split(int numNeuron, int featSplit, char *prefix)
@@ -159,7 +154,7 @@ void LIBSVM::export_split(int numNeuron, int featSplit, char *prefix)
             ptrFeat = feat + *ptrInst;
             ptrIdx = idx + *ptrInst;
             // Check the features between current instance index and next instance index
-            //for (ptrIdx=idx+*ptrInst; *ptrIdx<*(ptrInst+1); ++ptrIdx, ++ptrFeat) 
+            //for (ptrIdx=idx+*ptrInst; *ptrIdx<*(ptrInst+1); ++ptrIdx, ++ptrFeat)
             for (int j=*ptrInst; j<*(ptrInst+1); ++j) {
                 if (itr >= featSet[s+1]) break;
 
@@ -196,15 +191,14 @@ void LIBSVM::export_split(int numNeuron, int featSplit, char *prefix)
 
 int LIBSVM::to_dense(int featStart, int featStop)
 {
-    if (this->ptrInst == NULL) 
+    if (this->ptrInst == NULL)
         err(3, "LIBSVM::to_dense: this->ptrInst is a null pointer.");
-    if (this->feat == NULL) 
+    if (this->feat == NULL)
         err(3, "LIBSVM::to_dense: this->feat is a null pointer.");
-    if (this->idx == NULL) 
+    if (this->idx == NULL)
         err(3, "LIBSVM::to_dense: this->idx is a null pointer.");
 
-    int numFeatSplit = featStop - featStart;
-    FEAT *denseFeat = new FEAT[numInst * numFeatSplit];
+    FEAT *denseFeat = new FEAT[numInst * numFeat];
     FEAT *ptrDenseFeat = denseFeat;
     FEAT *ptrFeat = this->feat;
     IDX *ptrIdx = this->idx;
@@ -266,18 +260,27 @@ floatX* LIBSVM::getFeatDenseMatrix(int rank)
     return data;
 }
 
-int* LIBSVM::initFeatSplit(int numNeuron, int split)
+int LIBSVM::read_label(int prevSplitId, char *prefix, int labelInit, int rankfordebug)
 {
-    this->featSplit = split;
-    this->featSet = new int[featSplit+1];
-    int normSet = numNeuron / featSplit;
-    int lastSet = numNeuron - normSet * (featSplit - 1);
-    floatX *ptrFeat;
-    int *ptrIdx;
-    featSet[0] = 1;
-    for (int s=1; s<=featSplit; ++s) featSet[s] = featSet[s-1] + normSet;
-    featSet[featSplit] = featSet[featSplit-1] + lastSet;
-    return featSet;
+    char filename[MAX_LEN_FILENAME] = {0};
+    snprintf(filename, sizeof(filename), "%s.lbl", prefix);
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) return ERR_READ;
+
+    this->label = new LABEL[this->numInst];
+    if (this->label == NULL) return ERR_NEW;
+
+    char *temp;
+    char *line;
+    LABEL instId = 0;
+    IDX idx = 0;
+    LABEL *ptrLbl = this->label;
+    while ((line = readline(fp))!=NULL) {
+        temp = strtok(line, " \t");
+        *ptrLbl = atoi(temp) - labelInit;
+        ++ptrLbl;
+    }
+    assert(this->numInst == (ptrLbl-this->label));
 }
 
 int* LIBSVM::getLabel()
@@ -288,6 +291,11 @@ int* LIBSVM::getLabel()
 FEAT* LIBSVM::getFeature()
 {
     return this->feat;
+}
+
+FEAT_SZ LIBSVM::getNumFeat()
+{
+    return this->numFeat;
 }
 
 INST_SZ LIBSVM::getNumInst()

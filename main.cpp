@@ -77,20 +77,18 @@ int main(int argc, char** argv) {
     // Read data
     dnn.readInput(filename, datafile, numInst, numClass, numFeat, labelInit, IS_INPUT_SPLIT);
 
-    dnn.setInstBatch(2);
+    dnn.setInstBatch(1);
 
     bool isTrain = true;
     if (isTrain) {
         for (int i=0; i<MAX_ITER; ++i) {
             dnn.feedforward(isTrain);
             //dnn.calcGradient();
-            dnn.backprop();
-            /*
-            dnn.calcJacobian();
-            dnn.calcJBJv();
-            dnn.CG();
-            dnn.update();
-            */
+            //dnn.backprop();
+            // dnn.calcJacobian();
+            //dnn.calcJBJv();
+            //dnn.CG();
+            //dnn.update();
         }
     }
     else {

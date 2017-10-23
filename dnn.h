@@ -6,11 +6,13 @@
 extern "C" {
 #include <cblas.h>
 }
+//#include "mkl.h"
 #include <mpi.h>
 #include <math.h>
 #include <stdlib.h>
 
 #define NEWTON_ITER 2
+#define SIGNAL_MAX_LEN 128
 
 class Activation;
 class Sigmoid;
@@ -19,10 +21,14 @@ class DNN;
 typedef void (DNN::*fpWeightInit)();
 typedef double (DNN::*fpLoss)(LABEL *lable, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
 typedef double floatX;
+typedef struct {
+    int rank;
+    char msg[SIGNAL_MAX_LEN];
+} Signal;
 
 class DNN {
     private:
-        int numLayer;       // Total number of layer for this NN.
+        int numLayer;       // Total number of layer for this NN, excluding input layer.
         int curLayer;       // Layer Id in this partition.
         int *numNeuron;     // Array of number of neuron for this NN structure. E.g. 28-300-300-1.
         int *split;         // Split structure for this NN. E.g. 2-2-1-1.
@@ -37,15 +43,17 @@ class DNN {
         floatX *weight;     // Weight matrix in this partition. E.g. 28*300, 300*300, 300*1.
         floatX *biases;     // Biases, which only stored in master partitions(prevSplitId=0). E.g. 300, 300, 1.
         floatX *grad;       // Gradient of the units in output layer
-        floatX *dLdz;       // Gradient of the units in output layer
-        double *dLdw;       // Gradient of the neurons' weight in local partitions
-        double *dLdb;       // Gradient of the biases in local partitions
+        floatX *dXidz;      // Gradient of the units in output layer
+        floatX *dXidw;      // Gradient of the neurons' weight in local partitions
+        floatX *dXidb;      // Gradient of the biases in local partitions
         double *dLdtheta;   // Organized of the gradient of the weight and biases
         double *global_dzds;       // This is M
-        double *z;
+        //floatX *dXids;      // Gradient of the units in output layer
+        double *z;			// instance rows by n_m columns
+        double *zPrev;		// instance rows by n_{m-1} columns
         floatX *X;          // Array of input feature
         int *Y;             // Array of one-hot label for multiclass
-        int instBatch;      // For pipeline in function value evaluation
+        int batchSize;      // For pipeline in function value evaluation
         double C;           // Regularization coefficient
         int world_rank;     // Rank of the process
         int world_size;     // Number of the processes
@@ -60,6 +68,7 @@ class DNN {
         MPI_Group reduceGrp;
         void allocWeight();
         void allocBiases();
+        void allocGradient();
         void initMPI(int, char**);
         void initLayerId();
         void initSplitId();
@@ -71,6 +80,10 @@ class DNN {
 
     public:
         DNN();
+        MPI_Datatype Mpi_signal;
+        Signal sendBuf;
+        Signal *recvBuf;
+        void CreateSignalType (Signal *signal);
         virtual void initial(int argc, char **argv, const int numLayer, int *numNeuron, int *split);
         void readInput(char *prefixFilename, char *datafile=NULL, INST_SZ numInst=0, INST_SZ numClass=0, FEAT_SZ numFeat=0, int labelInit=-1, bool isFileExist=true);
         void readWeightFromFile(char *filename);
@@ -105,9 +118,9 @@ class DNN {
         void CG();
         void update();
 
-        void DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dLds, int dLds_m, int dLds_n, double *dLdw, int dLdw_m, int dLdw_n, double *dLdb);
+        void DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dXids, int dXids_m, int dXids_n, double *dLdw, int dLdw_m, int dLdw_n, double *dLdb);
         //void DNNOp_Recv_DeeperError(void *dLdz, int msgLen, MPI_Datatype datatype, int masterRank, MPI_Comm comm);
-        void DNNOp_Comp_ShallowError(int layer, double *weight, int weight_k, int weight_n, double *dLds, int dLds_m, int dLds_n, double *dLdzPrev, int dLdzPrev_m, int dLdzPrev_k);
+        void DNNOp_Comp_ShallowError(int layer, double *weight, int weight_k, int weight_n, double *dXids, int dXids_m, int dXids_n, double *dLdzPrev, int dLdzPrev_m, int dLdzPrev_k);
         int DNNOp_Allred_ShallowError(void *dLdzPrev, void *global_dLdzPrev, int mk, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
         int DNNOp_Allred_Dzds(void *dzdb, void *global_dzds, int lun, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
         int DNNOp_Allred_DzudzPrev(void *dzudzPrev, void *global_dzudzPrev, int luk, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
@@ -115,15 +128,14 @@ class DNN {
         void DNNOp_Comp_MPTZT(double *M, int M_l, int M_n_L, int M_n, double *P, int P_k, int P_n, double *Z, int Z_l, int Z_k, double *delta, int delta_n_L, int delta_l);
         void DNNOp_Comp_ZTPbarTM(double *Z, int Z_k, int Z_l, double *Pbar, int Pbar_n_L, int Pbar_l, double *M, int M_l, int M_n_L, int M_n, double *delta, int delta_k, int delta_n);
         //void DNNOp_Bcast_ShallowError(void *dLdz, int msgLen, MPI_Datatype datatype, int rank, MPI_Comm comm);
-        //void DNNOp_Comp_dLdz(int LAST_LAYER, double *dLdb, double *dLdW, int , int , double *zPrev, int , int , double *dLds, int m, int u, int n);
-        //void DNNOp_Comp_JTJv(int LAST_LAYER, double *dLdb, double *dLdW, int , int , double *zPrev, int , int , double *dLds, int m, int u, int n);
+        //void DNNOp_Comp_dLdz(int LAST_LAYER, double *dLdb, double *dLdW, int , int , double *zPrev, int , int , double *dXids, int m, int u, int n);
+        //void DNNOp_Comp_JTJv(int LAST_LAYER, double *dLdb, double *dLdW, int , int , double *zPrev, int , int , double *dXids, int m, int u, int n);
 };
 
 class Activation
 {
     public:
-        //double grad() {};
-        virtual double* grad(double *ptr, int len) {};
+        virtual floatX* grad(double *ptr, int len) {};
         virtual double calc(double *ptr, int len) {};
 };
 
@@ -144,17 +156,13 @@ class Sigmoid : public Activation
             // return
         }
 
-        virtual double* grad(double *ptr, int len)
+        virtual floatX* grad(double *ptr, int len)
         {
-            double *zGrad = new double[len];
+            floatX *zGrad = new floatX[len];
+            floatX *pGrad = zGrad;
             printf("sigmoid's gradient\n");
-            for (int i=0; i<len; ++i, ++ptr, ++zGrad) {
-                if (*ptr >= 0) {
-                    *zGrad = exp(-*ptr) / (exp(-*ptr) + 1);
-                }
-                else {
-                    *zGrad = 1 / (1 + exp(*ptr));
-                }
+            for (int i=0; i<len; ++i, ++pGrad) {
+                *pGrad = *(ptr+i) * (1.0 - *(ptr+i));
             }
             return zGrad;
         }
@@ -168,7 +176,7 @@ class Linear : public Activation
             printf("Linear\n");
         }
 
-        virtual double* grad(double *ptr, int len)
+        virtual floatX* grad(double *ptr, int len)
         {
             double *zGrad = new double[len];
             for (int i=0; i<len; ++i) *(zGrad + i) = 1.0;

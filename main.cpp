@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
     // Read data
     dnn.readInput(filename, datafile, numInst, numClass, numFeat, labelInit, IS_INPUT_SPLIT);
 
-    dnn.setInstBatch(2);
+    dnn.setInstBatch(1);
 
     bool isTrain = true;
     if (isTrain) {
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
             //dnn.calcGradient();
             dnn.backprop();
             dnn.calcJacobian();
-            dnn.CG();
+            //dnn.CG();
             /*
             dnn.update();
             */

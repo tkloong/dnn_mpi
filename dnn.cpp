@@ -712,10 +712,14 @@ void DNN::calcJacobian()
     //delete[] global_dzudzPrev;
 }
 
-double* DNN::calcJBJv(double *v)
+double* DNN::sumJBJv(double *v)
 {
     double *Pbar = Jv(v);
-    return JTv(Pbar);
+    // Pbar = 2 * Pbar
+    double *delta = JTv(Pbar);
+
+    delete[] Pbar;
+    return delta;
 }
 
 double* DNN::Jv(double *v)
@@ -729,7 +733,7 @@ double* DNN::Jv(double *v)
     double *Pbar = new double[n_L * l];
 
     // corresponding to weights' gradient
-    DNNOp_Comp_MPTZT(global_dzds, l, n_L, n, dXidw, k, n, z, l, k, Pbar, n_L, l);
+    DNNOp_Comp_MPTZT(global_dzds, l, n_L, n, v, k, n, z, l, k, Pbar, n_L, l);
 
     // corresponding to biases' gradient. Note that biases are stored only in master partitions
 
@@ -890,10 +894,49 @@ void DNN::setInstBatch(int batchSize)
 
 void DNN::CG()
 {
-    double *p = dLdtheta;
-    double *Mv;
-    for (int j=0; j<NEWTON_ITER; ++j) {
+    //double *p = dXidtheta;  // Gradient vector
+    double *p = dXidw;  // Gradient vector
+    double *r = dXidw;
+    double rTr, rrTrr;
+    double xi = 1e-5;
+    double alpha, beta;
+    double *dd, *rr;
+    double *Gv;
+    double pGv;
+    int len = prevEle * nextEle;
+    double *d = new double[len]();
+    double g_norm = cblas_dnrm2(len, dXidw, 1);
+    double *tmp = new double[len];
+
+    for (int j=0; j<CG_MAX_ITER; ++j) {
+        Gv = sumJBJv(p);
+
+        rTr = cblas_ddot(len, r, 1, r, 1);
+        pGv = cblas_ddot(len, p, 1, Gv, 1);
+
+        alpha = rTr / pGv;
+
+        cblas_daxpy(len, alpha, p, 1, d, 1);
+        cblas_daxpy(len, -alpha, Gv, 1, r, 1);
+
+        rrTrr = cblas_dnrm2(len, r, 1);
+
+        if (rrTrr <= xi * g_norm) { break; }
+
+        beta = (rrTrr * rrTrr) / rTr;
+        cblas_dcopy(len, r, 1, tmp, 1);
+        cblas_daxpy(len, beta, p, 1, tmp, 1);
+        cblas_dcopy(len, tmp, 1, p, 1);
     }
+    DISP_GATHER_ALL("Partition %d: CG finished!\n", world_rank);
+}
+
+void DNN::line_search()
+{
+}
+
+void DNN::update()
+{
 }
 
 void DNN::DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dXids, int dXids_m, int dXids_n, double *dXidw, int dXidw_m, int dXidw_n, double *dXidb)
@@ -978,7 +1021,7 @@ void DNN::DNNOp_Comp_MPTZT(double *M, int M_l, int M_n_L, int M_n, double *P, in
     double alpha = 1.0;
     double beta = 0.0;
 
-    double *tmp = new double[P_k*Z_l];
+    double *tmp = new double[P_n*Z_l];
 
     // OP(P) =[] n * k; OP(Z) =[] k * l; tmp =[] n * l;
     cblas_dgemm(CblasRowMajor, CblasTrans, CblasTrans,
@@ -1001,9 +1044,12 @@ void DNN::DNNOp_Comp_ZTPbarTM(double *Z, int Z_k, int Z_l, double *Pbar, int Pba
     int stride_inst = M_n_L * M_n;
     for (int i=0; i<M_l; ++i) {
         // Pbar =[] n_L * l; M =[] n_L * n;
-        cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                Pbar_n_L, M_n, 1, alpha, Pbar + i, Pbar_l, M + i*stride_inst, M_n, beta, tmp + i*M_n, M_n);
+        cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+                1, M_n, M_n_L, alpha, Pbar + i, Pbar_l, M + i*stride_inst, M_n, beta, tmp + i*M_n, M_n);
     }
+
+    cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+            Z_k, M_n, Z_l, alpha, Z, Z_k, tmp, M_n, beta, delta, delta_n);
 }
 
 int DNN::DNNOp_Allred_ShallowError(void *dXidzPrev, void *global_dXidzPrev, int mk, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm)

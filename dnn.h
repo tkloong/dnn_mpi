@@ -12,6 +12,7 @@ extern "C" {
 #include <stdlib.h>
 
 #define NEWTON_ITER 2
+#define CG_MAX_ITER 20
 #define SIGNAL_MAX_LEN 128
 
 class Activation;
@@ -46,7 +47,7 @@ class DNN {
         floatX *dXidz;      // Gradient of the units in output layer
         floatX *dXidw;      // Gradient of the neurons' weight in local partitions
         floatX *dXidb;      // Gradient of the biases in local partitions
-        double *dLdtheta;   // Organized of the gradient of the weight and biases
+        double *dXidtheta;   // Organized of the gradient of the weight and biases
         double *global_dzds;       // This is M
         //floatX *dXids;      // Gradient of the units in output layer
         double *z;			// instance rows by n_m columns
@@ -112,10 +113,11 @@ class DNN {
         //void calcGradient();
         void backprop();
         void calcJacobian();
-        double* calcJBJv(double *v);
+        double* sumJBJv(double *v);
         double* Jv(double *v);
         double* JTv(double *v);
         void CG();
+        void line_search();
         void update();
 
         void DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dXids, int dXids_m, int dXids_n, double *dLdw, int dLdw_m, int dLdw_n, double *dLdb);

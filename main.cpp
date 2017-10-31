@@ -86,10 +86,9 @@ int main(int argc, char** argv) {
             //dnn.calcGradient();
             dnn.backprop();
             dnn.calcJacobian();
-            //dnn.CG();
-            /*
+            dnn.CG();
+            dnn.line_search();
             dnn.update();
-            */
         }
     }
     else {

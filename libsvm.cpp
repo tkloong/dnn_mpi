@@ -34,7 +34,9 @@ int LIBSVM::libsvm_read(const char* datafile, INST_SZ start, INST_SZ stop)
 {
     char *line;
     FILE *fp = fopen(datafile, "r");
-    if (fp == NULL) return ERR_READ;
+    if (fp == NULL) {
+        err(1, "Can't open file \"%s\".", datafile);
+    }
 
     int numInst = 0;
     while ((line = readline(fp))!=NULL) {
@@ -83,7 +85,9 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename)
     char filename[MAX_LEN_FILENAME];
     snprintf(filename, sizeof(filename), "%s.feat%d", prefixFilename, featSet);
     FILE *fp = fopen(filename, "r");
-    if (fp == NULL) err(1, "Can't open file");
+    if (fp == NULL) {
+        err(1, "Can't open file \"%s.feat%d\".", prefixFilename, featSet);
+    }
 
     this->numInst = 0;
     while ((line = readline(fp))!=NULL) {
@@ -265,7 +269,9 @@ int LIBSVM::read_label(int prevSplitId, char *prefix, int labelInit, int rankfor
     char filename[MAX_LEN_FILENAME] = {0};
     snprintf(filename, sizeof(filename), "%s.lbl", prefix);
     FILE *fp = fopen(filename, "r");
-    if (fp == NULL) return ERR_READ;
+    if (fp == NULL) {
+        err(1, "Can't open file \"%s\".", prefix);
+    }
 
     this->label = new LABEL[this->numInst];
     if (this->label == NULL) return ERR_NEW;

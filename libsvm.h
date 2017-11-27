@@ -57,7 +57,7 @@ class LIBSVM {
     public:
         LIBSVM() : max_line_len(MAX_LINE_LEN) {}
 
-        LIBSVM(INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat) : numInst(numInst), totalFeat(numFeat), max_line_len(MAX_LINE_LEN) {}
+        LIBSVM(INST_SZ numInst, INST_SZ numClass, FEAT_SZ numFeat) : numInst(numInst), totalFeat(numFeat), numClass(numClass), max_line_len(MAX_LINE_LEN) {}
 
         LIBSVM(int numInst, int numClass, int numFeat, int featSplit) : numInst(numInst), numClass(numClass), totalFeat(numFeat), featSplit(featSplit), max_line_len(MAX_LINE_LEN) {}
 

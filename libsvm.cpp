@@ -96,7 +96,7 @@ int LIBSVM::read_split_feat(int featSet, char *prefixFilename)
     if (this->feat != NULL) delete[] this->feat;
     this->feat = new FEAT[this->numInst * this->numFeat];
     if (this->feat == NULL) err(2, "Allocation error");
-    this->ptrInst = new int[this->numInst + 1];
+    this->ptrInst = new int[this->numInst + 1]();
     if (this->ptrInst == NULL) err(2, "Allocation error");
 
     char *temp;

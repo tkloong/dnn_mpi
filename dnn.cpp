@@ -2,6 +2,7 @@
 #include <time.h>
 #include <exception>
 #include <stddef.h>
+#include <unistd.h>
 #include "dnn.h"
 #define DEBUG false
 
@@ -81,6 +82,8 @@ void DNN::initial(int argc, char **argv, const int numLayer, int *numNeuron, int
     this->z = NULL;
     this->zPrev = NULL;
     this->Y = NULL;
+    this->accuracy = 0;
+    this->global_loss = 0;
 
     // Check configuration
     if (weightInit == &DNN::NOT_DEF) {
@@ -385,7 +388,7 @@ void DNN::finalize()
     MPI_Finalize();
 }
 
-double DNN::feedforward(bool isTrain)
+double DNN::feedforward(bool isTrain, bool isComputeAccuracy)
 {
     int batchSize = this->batchSize;  // Function pipeline
     this->reg_coeff = data->getNumInst()/batchSize;  // Be attention on remainder
@@ -470,14 +473,17 @@ double DNN::feedforward(bool isTrain)
 
             this->current_loss = this->current_loss / m + global_regularization / (2 * reg_coeff);
 
-            Predict_Label *predicted = new Predict_Label[m];
-            Predict_Label *global_predicted = new Predict_Label[m];
-            getPrediction(predicted, z, &m, &n);
+            if (isComputeAccuracy) {
+                Predict_Label *predicted = new Predict_Label[m];
+                Predict_Label *global_predicted = new Predict_Label[m];
+                getPrediction(predicted, z, &m, &n, &startLbl);
 
-            MPI_Reduce(predicted, global_predicted, m, MPI_DOUBLE_INT, MPI_MAXLOC, 0, recvComm);
+                MPI_Reduce(predicted, global_predicted, m, MPI_DOUBLE_INT, MPI_MAXLOC, 0, recvComm);
 
-            if (world_rank == masterId[LAST_LAYER]) {
-                getAccuracy(Y, global_predicted, &m);
+                if (world_rank == masterId[LAST_LAYER]) {
+                    this->accuracy = computeAccuracy(Y, global_predicted, &m);
+                    MPI_Bcast(&accuracy, 1, MPI_DOUBLE, masterId[LAST_LAYER], dup_comm_world);
+                }
             }
 
             // Reduce to global loss and broadcast to all partition
@@ -491,12 +497,15 @@ double DNN::feedforward(bool isTrain)
             DLOG("[feedforward] global_loss: %lf (from rank %d)\n", global_loss, world_rank);
         }
         else {
-            if (isTrain) MPI_Bcast(dXidz, mn, MPI_DOUBLE, 0, reduceComm);
+            if (isComputeAccuracy) MPI_Bcast(&accuracy, 1, MPI_DOUBLE, masterId[LAST_LAYER], dup_comm_world);
             MPI_Bcast(&global_loss, 1, MPI_DOUBLE, masterId[LAST_LAYER], dup_comm_world);
+            if (isTrain) MPI_Bcast(dXidz, mn, MPI_DOUBLE, 0, reduceComm);
         }
     }
 
     if (curLayer != LAST_LAYER) {
+        if (isComputeAccuracy)
+            MPI_Bcast(&accuracy, 1, MPI_DOUBLE, masterId[LAST_LAYER], dup_comm_world);
         MPI_Bcast(&global_loss, 1, MPI_DOUBLE, masterId[LAST_LAYER], dup_comm_world);
     }
 
@@ -806,8 +815,7 @@ void DNN::randomInit()
     for (int i=0; i<total; ++i) {
         accum = 0;
         for (int c=0; c<12; ++c) accum += rand();
-        //*(pWei++) = accum / RAND_MAX - 6;
-        *(pWei++) = 0.1;  // Debug used
+            *(pWei++) = accum / RAND_MAX - 6;
     }
 }
 
@@ -931,28 +939,41 @@ double DNN::squareLossCalc(LABEL *label, double *x, int *inst, int *unit, int *s
     return Xi;
 }
 
-void DNN::getPrediction(Predict_Label *pPredicted, double *pZ, int *m, int *n)
+void DNN::getPrediction(Predict_Label *pPredicted, double *pZ, int *m, int *n, int *startLbl)
 {
     double max = 0;
 
     for (int i=0; i<*m; ++i) {
         max = *pZ;
         pPredicted->similarity = *pZ;
-        pPredicted->index = 0;
+        pPredicted->index = *startLbl;
+        DLOG("*pZ = %lf\n", *pZ);
         for (int j=1; j<*n; ++j) {
+            ++pZ;
             if (*pZ > max) {
                 max = *pZ;
                 pPredicted->similarity = *pZ;
-                pPredicted->index = j;
+                pPredicted->index = j + *startLbl;
             }
-            ++pZ;
+            DLOG("*pZ = %lf\n", *pZ);
         }
+        ++pZ;
         ++pPredicted;
     }
 }
 
-double DNN::getAccuracy(int *label, Predict_Label *pL, int *m)
+double DNN::computeAccuracy(int *label, Predict_Label *pL, int *m)
 {
+    double correct = 0;
+    for (int i=0; i<*m; ++i) {
+        if (*label == pL->index) {
+            ++correct;
+        }
+        ++label;
+        ++pL;
+    }
+    DLOG("Correct = %lf / %d; Acc = %lf\n", correct, *m, correct/ *m);
+    return correct / *m;
 }
 
 void DNN::setInstBatch(int batchSize)
@@ -1033,7 +1054,7 @@ int DNN::line_search(double alpha, double *d)
 
     // Do feedforward after weight is updated intrinsicly.
     double old_loss = global_loss;
-    double new_loss = feedforward(false);
+    double new_loss = feedforward(false, false);
     char isContinue = 1;
     int iter = 0;
     while (iter++ < MAX_LINE_SEARCH) {
@@ -1073,7 +1094,7 @@ int DNN::line_search(double alpha, double *d)
         else {
             cblas_daxpy(kn, -alpha, d, 1, weight, 1);
         }
-        new_loss = feedforward(false);
+        new_loss = feedforward(false, false);
     }
 
     DLOG("Partition %d: iter=%d; alpha=%lf\n", world_rank, iter, alpha);

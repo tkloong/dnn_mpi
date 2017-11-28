@@ -12,7 +12,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define CG_MAX_ITER 10
+#define CG_MAX_ITER 100
 #define MAX_LINE_SEARCH 30
 #define SIGNAL_MAX_LEN 128
 
@@ -62,6 +62,7 @@ class DNN {
         double *zPrev_bias;		// instance rows by (n_{m-1} + 1) columns
         double current_loss;
         double global_loss;
+        double accuracy;
         floatX *X;          // Array of input feature
         int *Y;             // Array of one-hot label for multiclass
         int batchSize;      // For pipeline in function value evaluation
@@ -89,9 +90,11 @@ class DNN {
         //void NOT_DEF(double *);
 
     public:
+        Predict_Label *global_predicted;
         double getLoss() { return global_loss; }
-        void getPrediction(Predict_Label *likelihood, double *z, int *m, int *n);
-        double getAccuracy(int *label, Predict_Label *pL, int *m);
+        void getPrediction(Predict_Label *pPredicted, double *z, int *m, int *n, int *startLbl);
+        double computeAccuracy(int *label, Predict_Label *pL, int *m);
+        double getAccuracy() { return this->accuracy; }
         DNN(int argc, char **argv);
         int world_rank;     // Rank of the process
         MPI_Datatype Mpi_signal;
@@ -122,8 +125,7 @@ class DNN {
         double l1Loss(LABEL *label, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
         //double (*activationFunc[])(double *);
         void setInstBatch(int batchSize);
-        double feedforward(bool isTrain);
-        //void calcGradient();
+        double feedforward(bool isTrain, bool isComputeAccuracy=true);
         void backprop();
         void calcJacobian();
         double* sumJBJv(double *v);
@@ -135,7 +137,6 @@ class DNN {
         void update(double alpha, double *d);
 
         void DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dXids, int dXids_m, int dXids_n, double *dLdw, int dLdw_m, int dLdw_n, double *dLdb);
-        //void DNNOp_Recv_DeeperError(void *dLdz, int msgLen, MPI_Datatype datatype, int masterRank, MPI_Comm comm);
         void DNNOp_Comp_ShallowError(double *weight, int weight_k, int weight_n, double *dXids, int dXids_m, int dXids_n, double *dXidzPrev, int dXidzPrev_m, int dXidzPrev_k);
         int DNNOp_Allred_ShallowError(void *dLdzPrev, void *global_dLdzPrev, int mk, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
         int DNNOp_Allred_Dzds(void *dzdb, void *global_dzds, int lun, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
@@ -143,9 +144,6 @@ class DNN {
         void DNNOp_Comp_DzudzPrev(double *dzuds, int global_dzdb_l, int global_dzdb_n_L, int global_dzdb_n, double *weight, int weight_k, int weight_n, double *dzudzPrev, int dzudzPrev_l, int dzudzPrev_n_L, int dzudzPrev_k);
         void DNNOp_Comp_MVTZPrevT(double *M, int M_l, int M_n_L, int M_n, double *V, int V_k, int V_n, double *ZPrev, int ZPrev_l, int ZPrev_k, double *delta, int delta_n_L, int delta_l);
         void DNNOp_Comp_ZTPbarTM(double *Z, int Z_k, int Z_l, double *Pbar, int Pbar_n_L, int Pbar_l, double *M, int M_l, int M_n_L, int M_n, double *delta, int delta_k, int delta_n);
-        //void DNNOp_Bcast_ShallowError(void *dLdz, int msgLen, MPI_Datatype datatype, int rank, MPI_Comm comm);
-        //void DNNOp_Comp_dLdz(int LAST_LAYER, double *dLdb, double *dLdW, int , int , double *zPrev, int , int , double *dXids, int m, int u, int n);
-        //void DNNOp_Comp_JTJv(int LAST_LAYER, double *dLdb, double *dLdW, int , int , double *zPrev, int , int , double *dXids, int m, int u, int n);
 };
 
 class Activation

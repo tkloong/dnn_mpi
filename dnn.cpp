@@ -484,6 +484,9 @@ double DNN::feedforward(bool isTrain, bool isComputeAccuracy)
                     this->accuracy = computeAccuracy(Y, global_predicted, &m);
                     MPI_Bcast(&accuracy, 1, MPI_DOUBLE, masterId[LAST_LAYER], dup_comm_world);
                 }
+                else {
+                    MPI_Bcast(&accuracy, 1, MPI_DOUBLE, masterId[LAST_LAYER], dup_comm_world);
+                }
             }
 
             // Reduce to global loss and broadcast to all partition

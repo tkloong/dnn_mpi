@@ -528,7 +528,6 @@ void DNN::backprop()
     int mn = m * n;
     int mk = m * k;
     int kn = k * n;
-    int msgLen = mn;
 
     double *zGrad = this->activationFunc[curLayer]->grad(z, mn);
     int u = numNeuron[numLayer];
@@ -541,95 +540,33 @@ void DNN::backprop()
     double *dXidzPrev = new double[mk]();
     double *global_dXidzPrev = new double[mk]();
 
-    if (curLayer == LAST_LAYER) { // Can combine
-        int mu = m * numNeuron[numLayer];
-        //delete[] dXids;
-        //dXids = new double[mn]();  // dXids is a diagonal matrix only in the last layer,
-        // so we reduce the memory to mn of elements.
+    if (curLayer < LAST_LAYER) {
+        // Receive gradient from deeper layer
+        MPI_Bcast(dXidz, mn, MPI_DOUBLE, 0, nextBcastComm);
+    }
 
-        // Activation gradient. Element-wise vector-vector multiplication
-        double *pDXids = dXids;
-        for (int i=0; i<m; ++i) {
-            for (int j=0; j<n; ++j) {
-                *(pDXids+i*n+j) = *(dXidz+i*n+j) * *(zGrad+i*n+j);
-            }
+    double *pDXids = dXids;
+    double *pDXidz = dXidz;
+    for (int i=0; i<m; ++i) {
+        for (int j=0; j<n; ++j) {
+            *(pDXids++) = *(pDXidz++) * zGrad[i*n + j];
         }
+    }
 
-        DNNOp_Comp_Grad(zPrev, m, k, dXids, m, n, dXidw, k, n, dXidb);
+    DNNOp_Comp_Grad(zPrev, m, k, dXids, m, n, dXidw, k, n, dXidb);
 
-        // Calculate dXidzPrev = W * dXids
-        // dXidzPrev =[] m * k; dXids =[] m * n; W =[] k * n;
-        // Note that in the last layer, #neurons n = u.
-        // The following line should changed.
-        //cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
-        //    m, k, n, alpha, dXids, n, weight, n, beta, dXidzPrev, k);
-
+    if (curLayer > 0) {
         DNNOp_Comp_ShallowError(weight, k, n, dXids, m, n, dXidzPrev, m, k);
 
         DNNOp_Allred_ShallowError(dXidzPrev, global_dXidzPrev, mk, MPI_DOUBLE, MPI_SUM, recvComm);
 
         // Broadcast gradient to shallower layer
-        //msgLen = muk;
-        msgLen = mk;
         if (nextSplitId == 0) {
-            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, prevBcastComm);
-            MPI_Bcast(global_dXidzPrev, msgLen, MPI_DOUBLE, MPI_ROOT, prevBcastComm);
+            MPI_Bcast(global_dXidzPrev, mk, MPI_DOUBLE, MPI_ROOT, prevBcastComm);
         }
         else {
-            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, prevBcastComm);
-            MPI_Bcast(global_dXidzPrev, msgLen, MPI_DOUBLE, MPI_PROC_NULL, prevBcastComm);
+            MPI_Bcast(global_dXidzPrev, mk, MPI_DOUBLE, MPI_PROC_NULL, prevBcastComm);
         }
-    }
-    else if (curLayer < LAST_LAYER && curLayer > 0) {
-        //dXidz = new double[mun]();
-        // Receive gradient from deeper layer
-        MPI_Bcast(&msgLen, 1, MPI_INT, 0, nextBcastComm);
-        MPI_Bcast(dXidz, msgLen, MPI_DOUBLE, 0, nextBcastComm);
-
-        // Activation gradient. Element-wise vector-vector multiplication
-        double *pDXids = dXids;
-        double *pDXidz = dXidz;
-        for (int i=0; i<m; ++i) {
-            for (int j=0; j<n; ++j) {
-                *(pDXids++) = *(pDXidz++) * zGrad[i*n + j];
-            }
-        }
-
-        DNNOp_Comp_Grad(zPrev, m, k, dXids, m, n, dXidw, k, n, dXidb);
-
-        DNNOp_Comp_ShallowError(weight, k, n, dXids, m, n, dXidzPrev, m, k);
-
-        DNNOp_Allred_ShallowError(dXidzPrev, global_dXidzPrev, mk, MPI_DOUBLE, MPI_SUM, recvComm);
-
-        // Broadcast gradient to shallower layer
-        //msgLen = muk;
-        msgLen = mk;
-        if (nextSplitId == 0) {
-            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_ROOT, prevBcastComm);
-            MPI_Bcast(global_dXidzPrev, msgLen, MPI_DOUBLE, MPI_ROOT, prevBcastComm);
-        }
-        else {
-            MPI_Bcast(&msgLen, 1, MPI_INT, MPI_PROC_NULL, prevBcastComm);
-            MPI_Bcast(global_dXidzPrev, msgLen, MPI_DOUBLE, MPI_PROC_NULL, prevBcastComm);
-        }
-    }
-    else if (curLayer == 0) {
-        //dXidz = new double[mun]();
-
-        // Receive gradient from deeper layer
-        MPI_Bcast(&msgLen, 1, MPI_INT, 0, nextBcastComm);
-        MPI_Bcast(dXidz, msgLen, MPI_DOUBLE, 0, nextBcastComm);
-
-        // Activation gradient. Element-wise vector-vector multiplication
-        double *pDXids = dXids;
-        double *pDXidz = dXidz;
-        for (int i=0; i<m; ++i) {
-            for (int j=0; j<n; ++j) {
-                *(pDXids++) = *(pDXidz++) * zGrad[i*n + j];
-            }
-        }
-
-        DNNOp_Comp_Grad(zPrev, m, k, dXids, m, n, dXidw, k, n, dXidb);
     }
 }
 

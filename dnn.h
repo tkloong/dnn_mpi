@@ -11,12 +11,15 @@
 #include <mpi.h>
 #include <math.h>
 #include <stdlib.h>
+#include <exception>
 
 #define CG_MAX_ITER 100
 #define MAX_LINE_SEARCH 30
 #define SIGNAL_MAX_LEN 128
 
 #define ETA 0.01
+
+using namespace std;
 
 class Activation;
 class Sigmoid;
@@ -46,17 +49,17 @@ class DNN {
         int nextSplitId;    // Next split id in this partition.
         int prevEle;        // First dimension of weight matrix.
         int nextEle;        // Second dimension of weight matrix.
-        int *numPartition;  // Total number of partitions (Not used)
         int *numNeuronInSet;  // Array of floor(number of neurons in partitions for each layer). E.g. 14, 150, 300, 10
+        int m;              // The cardinality of subsampled set.
+        int l;              // The cardinality of instance set.
         floatX *weight;     // Weight matrix in this partition. E.g. 28*300, 300*300, 300*1.
         floatX *biases;     // Biases, which only stored in master partitions(prevSplitId=0). E.g. 300, 300, 10.
         floatX *theta;      // Organized of the weight (and bias if exists)
         floatX *dXidz;      // Gradient of the neurons in local partition w.r.t. z
         floatX *dXidw;      // Gradient of the neurons' weight in local partitions
         floatX *dXidb;      // Gradient of the biases in local partitions
-        double *dXidtheta;   // Organized of the gradient of the weight and biases (Not used)
+        double *dXidtheta;   // Organized of the gradient of the weight and biases
         double *dzuds;       // This is M
-        //floatX *dXids;      // Gradient of the units in output layer
         double *z;			// instance rows by n_m columns
         double *zPrev;		// instance rows by n_{m-1} columns
         double *zPrev_bias;		// instance rows by (n_{m-1} + 1) columns
@@ -65,6 +68,7 @@ class DNN {
         double accuracy;
         floatX *X;          // Array of input feature
         int *Y;             // Array of one-hot label for multiclass
+        double subsampled_portion;
         int batchSize;      // For pipeline in function value evaluation
         double reg_coeff;   // Regularization coefficient, C
         int world_size;     // Number of the processes
@@ -125,6 +129,8 @@ class DNN {
         double l1Loss(LABEL *label, double *x, int *inst, int *unit, int *startLbl, int *stopLbl);
         //double (*activationFunc[])(double *);
         void setInstBatch(int batchSize);
+        void setSubsampledPortion(double subsampled_portion);
+        void activate();
         double feedforward(bool isTrain, bool isComputeAccuracy=true);
         void backprop();
         void calcJacobian();
@@ -136,7 +142,7 @@ class DNN {
         int line_search(double alpha, double *d);
         void update(double alpha, double *d);
 
-        void DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dXids, int dXids_m, int dXids_n, double *dLdw, int dLdw_m, int dLdw_n, double *dLdb);
+        void DNNOp_Comp_Grad(double *zPrev, int zPrev_m, int zPrev_k, double *dXids, int dXids_m, int dXids_n, double *dLdtheta, int dLdw_m, int dLdw_n);
         void DNNOp_Comp_ShallowError(double *weight, int weight_k, int weight_n, double *dXids, int dXids_m, int dXids_n, double *dXidzPrev, int dXidzPrev_m, int dXidzPrev_k);
         int DNNOp_Allred_ShallowError(void *dLdzPrev, void *global_dLdzPrev, int mk, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
         int DNNOp_Allred_Dzds(void *dzdb, void *global_dzds, int lun, MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);

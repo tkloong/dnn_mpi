@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
     // Configure NN settings
     DNN dnn(argc, argv);
     dnn.weightInit = &DNN::randomInit;
-    dnn.activationFunc = new Activation*[numLayer];
+    dnn.activationFunc = new Activation*[numLayer]();
     for (int i=0; i<numLayer-1; ++i)
         dnn.activationFunc[i] = new Sigmoid();
     dnn.activationFunc[numLayer-1] = new Linear();
@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
     // Read data
     dnn.readInput(filename, datafile, numInst, numClass, numFeat, labelInit, IS_INPUT_SPLIT);
 
-    dnn.setInstBatch(1);
+    dnn.activate();
 
     double *d;
     double alpha;
@@ -137,6 +137,8 @@ int main(int argc, char** argv) {
             if (dnn.world_rank == 0) {
                 printf("[main] global_loss = %lf\n", dnn.getLoss());
             }
+
+            delete[] d;
         }
     }
     else {

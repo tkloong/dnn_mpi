@@ -741,7 +741,7 @@ void DNN::sparseInit()
         // Initial the weight to those selected neurons
         for (int c=0; c<len; ++c) {
             accum = 0;
-            for (int c=0; c<12; ++c) accum += rand();
+            for (int i=0; i<12; ++i) accum += rand();
             weight[randSet[c]*nextEle + j] = accum / RAND_MAX - 6;
         }
     }

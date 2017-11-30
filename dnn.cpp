@@ -401,8 +401,6 @@ double DNN::feedforward(bool isTrain, bool isComputeAccuracy)
     int mn = m * n;
     int mk = m * k;
     double *s = new double[mn];
-    // memset(this->z, 0, mn * sizeof(double));
-    // memset(this->zPrev, 0, mn * sizeof(double));
     global_loss = 0;
     double regularization = 0;
     double global_regularization = 0;
@@ -723,13 +721,30 @@ void DNN::randomInit()
     for (int i=0; i<kn; ++i) {
         accum = 0;
         for (int c=0; c<12; ++c) accum += rand();
-            *(pWei++) = accum / RAND_MAX - 6;
+        //*(pWei++) = accum / RAND_MAX - 6;
+        *(pWei++) = 0.1;
     }
 }
 
 void DNN::sparseInit()
 {
     DLOG("sparseInit\n");
+    int accum;
+    int len = sqrt(prevEle);
+    int *randSet = new int[len];
+
+    for (int j=0; j<nextEle; ++j) {
+        // Decide which neuron to be initialize
+        for (int i=0; i<len; ++i) {
+            *(randSet + i) = rand() % prevEle;
+        }
+        // Initial the weight to those selected neurons
+        for (int c=0; c<len; ++c) {
+            accum = 0;
+            for (int c=0; c<12; ++c) accum += rand();
+            weight[randSet[c]*nextEle + j] = accum / RAND_MAX - 6;
+        }
+    }
 }
 
 double DNN::linear(double *x, int len)
